@@ -1,0 +1,6 @@
+Basado en la conversación, estos son los siguientes pasos y acciones acordadas:
+
+- **Desarrollo del prototipo "Briefing Agent"**: Desarrollar una herramienta independiente (_standalone_) que simule el formulario de _briefing_ actual. Esta herramienta debe integrar inteligencia artificial (mediante APIs) para analizar archivos PDF, verificar que la información esté completa y realizar preguntas de seguimiento a través de una interfaz de chat interactiva.
+- **Gestión de acceso e integración**: Dado que el sistema actual (_workspace_) está siendo descontinuado, el equipo debe migrar los desarrollos futuros hacia _monks flow_. Es necesario contactar a Tony para solicitar acceso al entorno de desarrollo de _monks flow_ tan pronto como esté disponible.
+- **Definición de flujo y requisitos**: El equipo debe definir el flujo de usuario ideal, determinar qué campos son esenciales en el proceso de _briefing_ y decidir cómo se estructurará la interacción entre el usuario y el agente.
+- **Prototipado para la generación de activos (Beatles)**: Se deben evaluar dos enfoques técnicos para la automatización de la creación de activos: desarrollar una automatización mediante _plugins_ de Figma o crear una herramienta independiente (_script_) que gestione plantillas de Figma basándose en activos previos.

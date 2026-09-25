@@ -1,0 +1,108 @@
+@import '@monksflow/monks-ui/globals.css';
+@source "../node_modules/@monksflow/monks-ui/dist";
+@source "./**/*.{ts,tsx,js,jsx}";
+
+:root {
+  font-family: 'Helvetica Now for Monks', Helvetica, Arial, sans-serif;
+  color: #171717;
+  background: #f4f1eb;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #f4f1eb;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* The design system marks labels and some control content as non-selectable by default. */
+#root,
+#root * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Keep native and design-system form controls inside their parent at every breakpoint. */
+input,
+textarea,
+select {
+  max-width: 100%;
+}
+
+.intent-shell {
+  background:
+    radial-gradient(circle at 78% 12%, rgba(144, 83, 216, 0.09), transparent 28rem),
+    linear-gradient(180deg, #f8f6f1 0%, #f2efe8 100%);
+}
+
+.inspiration-card {
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 14px 16px 16px;
+  box-shadow: 0 12px 34px rgba(39, 28, 15, 0.045);
+}
+
+.inspiration-options {
+  grid-template-columns: 1fr;
+}
+
+.inspiration-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  color: rgba(0, 0, 0, 0.62);
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.inspiration-option:hover,
+.inspiration-option:focus-visible {
+  border-color: rgba(142, 84, 215, 0.45);
+  color: rgba(0, 0, 0, 0.78);
+  background: #fff;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.inspiration-option-number {
+  display: grid;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  color: #6f35b6;
+  background: #eee5fa;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .inspiration-options {
+    grid-template-columns: 1fr;
+  }
+}
