@@ -25,7 +25,7 @@ The removed field-first wizard, legacy long form, demo identity, draft storage a
 
 ## Runtime and verification
 
-Run `npm run dev`; the Vite server hosts the local analysis endpoint. Vertex uses server-side Application Default Credentials and the configured model. Files are kept only in browser memory and are transmitted to Gemini only after the marketer asks for interpretation. PPTX and XLSX attachments are validated and converted to structured text with slide, sheet and cell locators before analysis; supported PDFs and images remain native multimodal inputs.
+Run `npm run dev`; the Vite server hosts the local analysis endpoint. Vertex uses server-side Application Default Credentials and the configured model. Files are kept only in browser memory and are transmitted to Gemini only after the marketer asks for interpretation. PPTX slide text and embedded PNG/JPEG images are sent with slide locators; XLSX sheet/cell text is extracted. Supported PDFs and images remain native multimodal inputs. When a retailer name is ambiguous, Gemini can use Google Search and show a verified web source beside its proposal.
 
 Verification commands:
 

@@ -67,6 +67,7 @@ test('Jira requires Drive first, creates one Task, and uploads no attachments', 
 
   const originalFetch = globalThis.fetch;
   try {
+    assert.equal((await request('GET', '')).status, 404);
     assert.equal((await request('GET', '/preview')).status, 409);
     assert.equal((await request('POST', '')).status, 409);
 
@@ -98,6 +99,19 @@ test('Jira requires Drive first, creates one Task, and uploads no attachments', 
     const created = await request('POST', '');
     assert.equal(created.status, 200);
     assert.equal(created.body.existing.key, 'TEST-1');
+    assert.deepEqual((await request('GET', '')).body, {
+      key: 'TEST-1',
+      url: 'https://example.atlassian.net/browse/TEST-1',
+    });
+    await writeFile(path.join(briefDirectory, 'drive.json'), JSON.stringify({
+      ...drive,
+      fingerprint: 'outdated',
+    }));
+    const callsBeforeLookup = calls.length;
+    assert.equal((await request('GET', '')).status, 200);
+    assert.equal(calls.length, callsBeforeLookup);
+    assert.equal((await request('GET', '/preview')).status, 409);
+    await writeFile(path.join(briefDirectory, 'drive.json'), JSON.stringify(drive));
     const repeated = await request('POST', '');
     assert.equal(repeated.status, 200);
     assert.equal(calls.filter((call) => call.url.endsWith('/issue')).length, 1);

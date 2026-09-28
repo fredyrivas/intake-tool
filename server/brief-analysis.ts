@@ -9,6 +9,7 @@ import {
   cleanValues,
   fileLimits,
   fileTypes,
+  presentationMimeType,
   type AiRequestTrace,
   type AnalysisPhase,
   type Attachment,
@@ -18,8 +19,10 @@ import {
   BRIEF_SYSTEM_INSTRUCTION,
   BRIEF_INSTRUCTION_VERSION,
 } from './brief-instruction.ts';
-import { extractOfficeText } from './office-text.ts';
+import { extractOfficeText, extractPowerPointImages } from './office-text.ts';
 import { applyDocumentClassifications } from './document-classification.ts';
+import { validateRetailerWebEvidence } from './web-evidence.ts';
+import { createAnalysisJobs } from './analysis-jobs.ts';
 
 function reply(response: ServerResponse, status: number, data: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -192,6 +195,14 @@ export function selectModel(
     };
   }
 
+  if (input.phase === 'document-enrichment' && !input.values.mediaPlacementRetailer?.length) {
+    return {
+      model: config.routingModel,
+      thinkingLevel: ThinkingLevel.LOW,
+      reason: 'An attached document may need visual and web verification of its retailer.',
+    };
+  }
+
   if (input.phase === 'final-review') {
     const unresolvedRequired = activeFields(input.values).filter(
       (field) => field.required && !input.values[field.id],
@@ -234,26 +245,38 @@ export function briefAnalysisPlugin(config: {
     location: config.location,
   });
   let busy = false;
+  const jobs = createAnalysisJobs();
   const middleware = async (
     request: IncomingMessage,
     response: ServerResponse,
     next: () => void,
   ) => {
     if (request.url?.split('?')[0] !== '/api/brief/analyze') return next();
-    if (request.method !== 'POST') return reply(response, 405, { error: 'Method not allowed.' });
+    const query = new URLSearchParams(request.url?.split('?')[1]);
     // This endpoint is development-only and uses the local user's ADC; production needs real auth.
     const host = request.headers.host || '';
     if (
       !/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host) ||
       (request.headers.origin && request.headers.origin !== `http://${host}`) ||
-      !request.headers['content-type']?.startsWith('application/json')
+      (request.method === 'POST' && !request.headers['content-type']?.startsWith('application/json')) ||
+      request.headers['sec-fetch-site'] === 'cross-site'
     )
       return reply(response, 403, { error: 'Local same-origin requests only.' });
+    if (request.method === 'GET' && query.has('job')) {
+      const result = jobs.get(query.get('job')!);
+      return reply(response, result.status, result.data);
+    }
+    if (request.method !== 'POST') return reply(response, 405, { error: 'Method not allowed.' });
     if (busy)
       return reply(response, 429, { error: 'An analysis is already running. Try again shortly.' });
     busy = true;
     let attemptedTrace: AiRequestTrace | null = null;
     let generationSignal: AbortSignal | undefined;
+    let jobId: string | undefined;
+    const finish = (status: number, data: unknown) => {
+      if (jobId) jobs.finish(jobId, status, data);
+      else reply(response, status, data);
+    };
     try {
       let input: Awaited<ReturnType<typeof readAnalysisRequest>>;
       try {
@@ -264,6 +287,11 @@ export function briefAnalysisPlugin(config: {
             'Check the files and message. Use up to 6 PDF, PPTX, XLSX, TXT, PNG or JPEG files, 8 MB each and 15 MB total.',
         });
       }
+      if (query.get('async') === '1') {
+        jobId = jobs.start();
+        reply(response, 202, { jobId, status: 'running' });
+      }
+      const preparationStartedAt = Date.now();
       const contentDocuments = input.documents.filter((document) => document.data);
       const catalog =
         input.phase === 'scope'
@@ -325,12 +353,26 @@ export function briefAnalysisPlugin(config: {
           parts.push({
             text: `Extracted document content. Preserve the slide or sheet/cell locator when citing evidence.\n${officeText}`,
           });
-        else if (doc.mimeType === 'text/plain')
+        if (doc.mimeType === presentationMimeType) {
+          const images = await extractPowerPointImages(doc);
+          for (const item of images) {
+            parts.push({
+              text: `Attachment ${doc.id}: embedded image on slide${item.slides.length === 1 ? '' : 's'} ${item.slides.join(', ')}. Inspect its visible content when citing document evidence.`,
+            });
+            parts.push({ inlineData: { mimeType: item.mimeType, data: item.data } });
+          }
+          if (!officeText && !images.length)
+            parts.push({ text: 'No readable slide text or supported embedded images were found.' });
+        } else if (doc.mimeType === 'text/plain')
           parts.push({ text: Buffer.from(doc.data, 'base64').toString('utf8') });
-        else parts.push({ inlineData: { mimeType: doc.mimeType, data: doc.data } });
+        else if (!officeText)
+          parts.push({ inlineData: { mimeType: doc.mimeType, data: doc.data } });
       }
       const selection = selectModel(input, config);
-      const requestId = crypto.randomUUID();
+      const searchRetailer =
+        (input.phase === 'scope' || input.phase === 'document-enrichment') &&
+        !input.values.mediaPlacementRetailer?.length;
+      const requestId = jobId ?? crypto.randomUUID();
       const startedAt = Date.now();
       const createdAt = new Date(startedAt).toISOString();
       attemptedTrace = {
@@ -355,13 +397,24 @@ export function briefAnalysisPlugin(config: {
             (total, document) => total + Buffer.byteLength(document.data, 'base64'),
             0,
           ),
+          preparationMs: startedAt - preparationStartedAt,
+          promptCharacters: parts.reduce((total, part) => total + (part.text?.length ?? 0), 0),
+          inlineParts: parts.filter((part) => part.inlineData).length,
+          inlineBytes: parts.reduce(
+            (total, part) =>
+              total +
+              (part.inlineData?.data ? Buffer.byteLength(part.inlineData.data, 'base64') : 0),
+            0,
+          ),
         },
         createdAt,
       };
       console.info(
         `[brief-analysis] starting ${attemptedTrace.phase} -> ${attemptedTrace.model} (${attemptedTrace.thinkingLevel})`,
       );
-      generationSignal = AbortSignal.timeout(90000);
+      // Uploaded documents can require a longer multimodal pass. Async callers
+      // poll short requests instead of holding an HTTP connection for this budget.
+      generationSignal = AbortSignal.timeout(contentDocuments.length ? 5 * 60_000 : 90_000);
       const result = await client.models.generateContent({
         model: selection.model,
         contents: [{ role: 'user', parts }],
@@ -369,6 +422,7 @@ export function briefAnalysisPlugin(config: {
           systemInstruction: BRIEF_SYSTEM_INSTRUCTION,
           responseMimeType: 'application/json',
           responseJsonSchema: analysisSchemaForPhase(input.phase),
+          ...(searchRetailer ? { tools: [{ googleSearch: {} }] } : {}),
           thinkingConfig: { thinkingLevel: selection.thinkingLevel },
           maxOutputTokens: 12000,
           abortSignal: generationSignal,
@@ -397,7 +451,11 @@ export function briefAnalysisPlugin(config: {
         throw error;
       }
       const parsed = analysisForActivePath(
-        applyDocumentClassifications(modelAnalysis, input.documents, contentDocuments),
+        applyDocumentClassifications(
+          validateRetailerWebEvidence(modelAnalysis, result.candidates?.[0]?.groundingMetadata),
+          input.documents,
+          contentDocuments,
+        ),
         input.values,
       );
       if (input.phase === 'follow-up') {
@@ -412,7 +470,7 @@ export function briefAnalysisPlugin(config: {
       console.info(
         `[brief-analysis] ${trace.phase} -> ${trace.model} (${trace.thinkingLevel}) ${trace.durationMs}ms`,
       );
-      reply(response, 200, {
+      finish(200, {
         analysis: parsed,
         trace,
         instructionVersion: BRIEF_INSTRUCTION_VERSION,
@@ -422,7 +480,7 @@ export function briefAnalysisPlugin(config: {
       const trace = attemptedTrace
         ? { ...attemptedTrace, durationMs: Date.now() - Date.parse(attemptedTrace.createdAt) }
         : null;
-      reply(response, generationSignal?.aborted ? 504 : 502, {
+      finish(generationSignal?.aborted ? 504 : 502, {
         error: generationSignal?.aborted
           ? 'The Monks AI assistant took too long to respond. Your text and files are still here. Please retry.'
           : 'The Monks AI assistant could not finish reading this request. Your text and files are still here. Please retry.',

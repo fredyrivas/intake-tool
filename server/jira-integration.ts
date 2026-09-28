@@ -132,6 +132,18 @@ export function jiraIntegrationPlugin(config: JiraConfig, rootDirectory = proces
         if (!match && !createMatch) return next();
         if (!isLocalRequest(request))
           return reply(response, 403, { error: 'Local requests only.' });
+        if (createMatch && request.method === 'GET') {
+          try {
+            const record = await readRecord(createMatch[1]);
+            if (record?.phase !== 'created' || !record.key || !record.url)
+              return reply(response, 404, { error: 'Jira Task not found.' });
+            return reply(response, 200, { key: record.key, url: record.url });
+          } catch (error) {
+            return reply(response, 502, {
+              error: error instanceof Error ? error.message : 'Could not load the Jira Task.',
+            });
+          }
+        }
         if (!config.cloudId || !config.projectKey || !config.token)
           return reply(response, 503, { error: 'Jira is not configured.' });
         if (match && request.method !== 'GET')

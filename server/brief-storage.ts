@@ -127,6 +127,8 @@ function summary(brief: StoredBrief) {
     updatedAt: brief.updatedAt,
     stage: brief.draft.stage,
     route: values?.requestTypes?.join(', ') || '',
+    brands: Array.isArray(values?.brand) ? values.brand : [],
+    dueDate: values?.expectedDeliveryDate?.[0] || null,
     projectId: brief.projectId,
     published: Boolean(brief.publication?.jira || brief.publication?.drive || !brief.projectId),
   };

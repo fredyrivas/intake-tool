@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
-import { extractOfficeText } from './office-text.ts';
+import { extractOfficeText, extractPowerPointImages } from './office-text.ts';
 
 const pptxMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -20,6 +20,37 @@ test('extracts PowerPoint text with slide locators', async () => {
 
   assert.match(result, /^\[Slide 1\]\nZiploc Holiday \| FY27/);
   assert.match(result, /\[Slide 2\]\nSecond slide/);
+});
+
+test('sends only images embedded on PowerPoint slides with their slide locators', async () => {
+  const zip = new JSZip();
+  zip.file('ppt/slides/slide1.xml', '<p:sld><a:blip r:embed="rId1"/></p:sld>');
+  zip.file('ppt/slides/slide2.xml', '<p:sld><a:blip r:embed="rId2"/></p:sld>');
+  zip.file(
+    'ppt/slides/_rels/slide1.xml.rels',
+    '<Relationships><Relationship Id="rId1" Target="../media/logo.png"/></Relationships>',
+  );
+  zip.file(
+    'ppt/slides/_rels/slide2.xml.rels',
+    '<Relationships><Relationship Id="rId2" Target="../media/logo.png"/></Relationships>',
+  );
+  const logo = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlTvZkAAAAASUVORK5CYII=',
+    'base64',
+  );
+  zip.file('ppt/media/logo.png', logo);
+  zip.file('ppt/media/unreferenced.jpg', Buffer.from('unused'));
+  const document = {
+    id: 'pptx',
+    name: 'brief.pptx',
+    mimeType: pptxMime,
+    data: await zip.generateAsync({ type: 'base64' }),
+  };
+
+  assert.equal(await extractOfficeText(document), '');
+  assert.deepEqual(await extractPowerPointImages(document), [
+    { slides: [1, 2], mimeType: 'image/png', data: logo.toString('base64') },
+  ]);
 });
 
 test('extracts Excel shared strings with sheet and cell locators', async () => {

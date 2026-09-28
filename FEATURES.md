@@ -23,7 +23,7 @@ The old `/brief` path redirects into the clarification experience. A structured 
 - Files can be selected or dragged into the upload area, listed, and removed. Upload is optional initially and available again for individual document fields.
 - Accepted formats: PDF, PPTX, XLSX, TXT, PNG, and JPEG. The limits are six files, 8 MB per file, and 15 MB total. Empty or unsupported files are rejected. A file with identical encoded content is not added twice, and the user receives a notice.
 - PPTX and XLSX MIME types can be recognized from their extensions when the browser omits a type. Attachments receive UUIDs; document-field answers reference these IDs. Removing a file also removes its field references.
-- PDF and image material can be sent to Gemini as native multimodal input. PPTX slide text and XLSX sheet/cell text are extracted server-side, with location references. Extraction is bounded to limit model input. TXT is handled as text. The app can classify uploaded Creative Direction, Content Matrix, and Asset Matrix documents by content rather than relying only on filenames.
+- PDF and image material can be sent to Gemini as native multimodal input. PPTX slide text and embedded PNG/JPEG images are extracted server-side with slide references; XLSX sheet/cell text is extracted with location references. Extraction is bounded to limit model input. TXT is handled as text. The app can classify uploaded Creative Direction, Content Matrix, and Asset Matrix documents by content rather than relying only on filenames.
 - Links are supported as answers for several document alternatives. The UI links to Creative Direction, Asset Matrix, Marketing Copy Checklist, and QR Request Form templates where those fields apply.
 
 ## 3. AI interpretation and review

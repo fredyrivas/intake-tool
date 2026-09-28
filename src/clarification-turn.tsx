@@ -5,6 +5,7 @@ import { capitalizeToolNames, fieldIsRequired, validValue, type Analysis, type A
 import type { ClarificationItem } from './brief-sections';
 import { FieldInput } from './brief-form';
 import { DocumentTemplateLink } from './document-template-link';
+import { allOptionsSelected, toggleAllOptions } from './multi-options';
 
 const fieldContext: Record<string, string> = {
   projectTitle: 'Let’s give this work a name that will be easy to recognize later.',
@@ -35,6 +36,8 @@ const fieldQuestion: Record<string, string> = {
   requestTypes: 'What kind of work are you planning?',
   deliveryTypes: 'How would you like the assets delivered?',
 };
+
+const totalAssetOptions = ['1', '2', '3', '5', '10', '20', '30', '40', '50'];
 
 export function ClarificationTurn({
   item,
@@ -107,7 +110,9 @@ export function ClarificationTurn({
       : modelPrompt || fieldQuestion[field.id] || fallbackQuestion,
   );
   const quickAnswers =
-    field.options || ['document', 'email', 'emails'].includes(field.type) || companion
+    field.id === 'totalAssets'
+      ? totalAssetOptions
+      : field.options || ['document', 'email', 'emails'].includes(field.type) || companion
       ? []
       : (question?.options || [])
           .filter(
@@ -146,8 +151,10 @@ export function ClarificationTurn({
       <div className="mt-6 sm:pl-12">
         {field.id !== 'brand' && field.options && ['select', 'multi'].includes(field.type) ? (
           <div className="flex flex-wrap gap-2" role="group" aria-label="Answer options">
-            {field.options.map((option) => {
-              const selected = (values[field.id] || []).includes(option);
+            {(field.type === 'multi' ? ['All', ...field.options] : field.options).map((option) => {
+              const selected = option === 'All'
+                ? allOptionsSelected(field.options!, values[field.id] || [])
+                : (values[field.id] || []).includes(option);
               return (
                 <Button
                   key={option}
@@ -160,7 +167,9 @@ export function ClarificationTurn({
                       const current = values[field.id] || [];
                       onValueChange(
                         field.id,
-                        selected
+                        option === 'All'
+                          ? toggleAllOptions(field.options!, current)
+                          : selected
                           ? current.filter((value) => value !== option)
                           : option === '__none__'
                             ? ['__none__']

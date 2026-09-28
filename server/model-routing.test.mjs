@@ -44,7 +44,10 @@ test('analysis omits conditional requirement decisions in every phase', () => {
 
 test('uses more thinking for document classification than routine follow-up', () => {
   const enrichment = selectModel(
-    request('document-enrichment', { requestTypes: ['EVOLVE'] }),
+    request('document-enrichment', {
+      requestTypes: ['EVOLVE'],
+      mediaPlacementRetailer: ['Walmart'],
+    }),
     config,
   );
   assert.equal(enrichment.model, config.extractionModel);
@@ -52,6 +55,15 @@ test('uses more thinking for document classification than routine follow-up', ()
   const followUp = selectModel(request('follow-up', { requestTypes: ['EVOLVE'] }), config);
   assert.equal(followUp.model, config.extractionModel);
   assert.equal(followUp.thinkingLevel, 'MINIMAL');
+});
+
+test('uses the search-capable routing model when documents may resolve a missing retailer', () => {
+  const selection = selectModel(
+    request('document-enrichment', { requestTypes: ['EVOLVE'] }),
+    config,
+  );
+  assert.equal(selection.model, config.routingModel);
+  assert.equal(selection.thinkingLevel, 'LOW');
 });
 
 test('escalates route reinterpretation and inconsistent final reviews', () => {

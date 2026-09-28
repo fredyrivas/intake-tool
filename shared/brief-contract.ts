@@ -69,7 +69,7 @@ export const fields: Field[] = [
     label: 'Creative Direction template',
     url: 'https://docs.google.com/presentation/d/1rN2L-kF1H-qEuBvmree7RadybgNM2EvT/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true',
   }),
-  field('requestTypes', 'Work route', 'multi', [], false, [
+  field('requestTypes', 'Type of Content Brief', 'multi', [], false, [
     'CREATE',
     'EVOLVE',
     'ACCELERATE',
@@ -512,6 +512,7 @@ export type Source = {
   documentId: string;
   page: number;
   excerpt: string;
+  webUrl?: string;
 };
 export type Proposal = { fieldId: string; values: string[]; source: Source };
 export type Analysis = {
@@ -539,6 +540,10 @@ export type AiRequestTrace = {
     documentMetadata: number;
     documentContents: number;
     documentBytes: number;
+    preparationMs?: number;
+    promptCharacters?: number;
+    inlineParts?: number;
+    inlineBytes?: number;
   };
   createdAt: string;
 };
@@ -655,6 +660,11 @@ export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis
       typeof p.source.documentId !== 'string' ||
       typeof p.source.excerpt !== 'string' ||
       p.source.excerpt.length > 2000 ||
+      (p.source.webUrl !== undefined &&
+        (p.fieldId !== 'mediaPlacementRetailer' ||
+          p.source.kind === 'interpretation' ||
+          typeof p.source.webUrl !== 'string' ||
+          !/^https:\/\/[^\s]+$/i.test(p.source.webUrl))) ||
       !Number.isInteger(p.source.page) ||
       p.source.page < 0
     )

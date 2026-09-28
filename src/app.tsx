@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, CardContent, Input, Label, Textarea } from '@monksflow/monks-ui';
 import { AdvancedAiLog } from './advanced-ai-log';
+import { requestBriefAnalysis } from './request-brief-analysis';
 import { BriefForm, FieldInput, type Disposition } from './brief-form';
 import { clarificationItemResolved, clarificationItemsFor } from './brief-sections';
 import { ClarificationTurn } from './clarification-turn';
@@ -32,6 +33,7 @@ import { BriefLibrary, type BriefSummary } from './brief-library';
 import { DocumentTemplateLink, OptionalDocumentGuidance } from './document-template-link';
 import { clearDraftDocuments, readDraftDocuments, writeDraftDocuments } from './draft-documents';
 import { BrandChoices } from './brand-choices';
+import { allOptionsSelected, toggleAllOptions } from './multi-options';
 import { downloadBriefSummaryPdf, type BriefPdfInput } from './brief-pdf';
 import googleDriveFavicon from './assets/google-drive.png';
 import jiraFavicon from './assets/jira.png';
@@ -117,11 +119,35 @@ type JiraTaskPreview = {
   creating: boolean;
 };
 
+type JiraTaskLink = { key: string; url: string };
+
 const draftStorageKey = 'monks.workspace-brief.draft.v3';
 const documentStorageKey = 'monks.workspace-brief.documents.v3';
 const legacyDraftStorageKey = 'monks.workspace-brief.draft.v2';
 const legacyDocumentStorageKey = 'monks.workspace-brief.documents.v2';
 const fieldById = new Map(fields.map((field) => [field.id, field]));
+function scopeFieldLabel(field: Field, values: Values): string {
+  const condition = field.when[field.when.length - 1];
+  if (condition) {
+    const parent = fieldById.get(condition.field);
+    if (!parent) return field.label;
+    const choices = condition.any.filter((choice) => values[parent.id]?.includes(choice));
+    return `${parent.label} (${(choices.length ? choices : condition.any).join(' / ')}) · ${field.label}`;
+  }
+
+  const productionNeed = field.id === 'stockAvailability'
+    ? 'Stock materials'
+    : field.id.startsWith('translation')
+      ? 'Translation'
+      : null;
+  if (!productionNeed) return field.label;
+  const parents = ['evolveNeeds', 'accelerateNeeds']
+    .filter((id) => values[id]?.includes(productionNeed))
+    .map((id) => fieldById.get(id)!.label);
+  return parents.length
+    ? `${parents.join(' / ')} (${productionNeed}) · ${field.label}`
+    : field.label;
+}
 const alternativeFieldsByPrimary = new Map<string, readonly [string, string]>(
   alternativeFieldGroups.map((group) => [group[0], group] as const),
 );
@@ -622,8 +648,10 @@ function ProposalEditor({
         <BrandChoices value={draft} onChange={setDraft} />
       ) : field.options && field.type === 'multi' ? (
         <div className="grid gap-2 sm:grid-cols-2">
-          {field.options.map((option) => {
-            const checked = draft.includes(option);
+          {['All', ...field.options].map((option) => {
+            const checked = option === 'All'
+              ? allOptionsSelected(field.options!, draft)
+              : draft.includes(option);
             return (
               <label
                 key={option}
@@ -633,6 +661,7 @@ function ProposalEditor({
                   type="checkbox"
                   checked={checked}
                   onChange={() => {
+                    if (option === 'All') return setDraft(toggleAllOptions(field.options!, draft));
                     if (checked)
                       return setDraft((current) => current.filter((value) => value !== option));
                     if (option === '__none__') return setDraft(['__none__']);
@@ -679,9 +708,7 @@ function ProposalEditor({
                   }
                   className="accent-[#7b3fc4]"
                 />
-                <span className="min-w-0 [overflow-wrap:anywhere]">
-                  {document.name}
-                </span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{document.name}</span>
               </label>
             ))}
           </div>
@@ -750,7 +777,16 @@ export function App() {
     readDraftDocuments()
       .catch(() => null)
       .then((stored) => {
-        if (active) setSavedDraft(readSavedDraft(stored ?? readSavedDocuments()));
+        if (!active) return;
+        if (
+          window.location.pathname === stagePaths.intent &&
+          new URLSearchParams(window.location.search).get('new') === '1'
+        ) {
+          clearBrowserDraft();
+          setSavedDraft(emptyDraft([]));
+        } else {
+          setSavedDraft(readSavedDraft(stored ?? readSavedDocuments()));
+        }
       });
     return () => {
       active = false;
@@ -818,9 +854,11 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     fingerprint: string;
   } | null>(null);
   const [jiraPreview, setJiraPreview] = useState<JiraTaskPreview | null>(null);
+  const [jiraTask, setJiraTask] = useState<JiraTaskLink | null>(null);
   const [jiraLoading, setJiraLoading] = useState(false);
   const [jiraCreating, setJiraCreating] = useState(false);
   const requestLock = useRef(false);
+  const loadBriefRequest = useRef(0);
   const lastSavedPayload = useRef('');
 
   const suggestionList = useMemo(() => Object.values(suggested), [suggested]);
@@ -946,6 +984,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setNameLocked(Boolean(brief.published));
     setDriveProject(null);
     setJiraPreview(null);
+    setJiraTask(null);
     lastSavedPayload.current = JSON.stringify({ draft, documents: brief.documents || [] });
     const availableDraft = {
       analysis: draft.analysis,
@@ -968,11 +1007,14 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     requestedStage?: Stage,
     origin: 'creator' | 'library' = 'library',
   ) {
+    const requestId = ++loadBriefRequest.current;
     setLoadingBrief(true);
     setError('');
+    setJiraTask(null);
     try {
       const response = await fetch(`/api/briefs/${id}`);
       const result = await response.json();
+      if (requestId !== loadBriefRequest.current) return;
       if (!response.ok) throw new Error(result.error || 'Could not open this brief.');
       const brief = result as StoredBrief;
       applyStoredBrief(brief, requestedStage, origin);
@@ -980,6 +1022,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
         const driveResponse = await fetch(`/api/briefs/${id}/drive`);
         if (driveResponse.ok) {
           const drive = (await driveResponse.json()) as { url: string; warnings: string[] };
+          if (requestId !== loadBriefRequest.current) return;
           setDriveProject({
             url: drive.url,
             warnings: drive.warnings,
@@ -989,12 +1032,22 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       } catch {
         // The brief remains usable when Drive status cannot be loaded.
       }
+      try {
+        const jiraResponse = await fetch(`/api/briefs/${id}/jira`);
+        if (jiraResponse.ok) {
+          const task = (await jiraResponse.json()) as JiraTaskLink;
+          if (requestId === loadBriefRequest.current) setJiraTask(task);
+        }
+      } catch {
+        // The brief remains usable when Jira status cannot be loaded.
+      }
     } catch (caught) {
+      if (requestId !== loadBriefRequest.current) return;
       setCurrentBriefId(null);
       setError(caught instanceof Error ? caught.message : 'Could not open this brief.');
       navigateToStage('briefs', { replace: true, briefId: null });
     } finally {
-      setLoadingBrief(false);
+      if (requestId === loadBriefRequest.current) setLoadingBrief(false);
     }
   }
 
@@ -1199,10 +1252,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
           ? document.data
           : '',
     }));
-    const response = await fetch('/api/brief/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const { response, result } = await requestBriefAnalysis(
+      JSON.stringify({
         phase,
         values: currentValues,
         documents: requestDocuments,
@@ -1219,9 +1270,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
               }))
             : [],
       }),
-      signal: AbortSignal.timeout(100000),
-    });
-    const result = await response.json();
+    );
     if (result.trace) recordTrace(result.trace as AiRequestTrace);
     if (!response.ok) throw new Error(result.error || 'We could not analyze this brief.');
     const next = parseAnalysis(result.analysis, currentDocuments);
@@ -1487,6 +1536,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   }
 
   const resetFlow = () => {
+    loadBriefRequest.current += 1;
     clearBrowserDraft();
     setCurrentBriefId(null);
     setNameLocked(false);
@@ -1515,6 +1565,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setStorageWarning('');
     setDriveProject(null);
     setJiraPreview(null);
+    setJiraTask(null);
   };
 
   const finalFields = activeFields(values).filter(
@@ -1809,6 +1860,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       const result = (await response.json()) as JiraTaskPreview & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Could not preview the Jira Task.');
       setJiraPreview(result);
+      if (result.existing) setJiraTask(result.existing);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not preview the Jira Task.');
     } finally {
@@ -1834,6 +1886,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       if (!response.ok && response.status !== 207)
         throw new Error(result.error || 'Could not create the Jira Task.');
       setJiraPreview(result);
+      if (result.existing) setJiraTask(result.existing);
       setNameLocked(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not create the Jira Task.');
@@ -1901,7 +1954,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                 disabled={busy || filesReading}
                 className="hidden items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-medium text-black/55 transition-colors hover:border-black/20 hover:bg-black/[0.03] hover:text-black disabled:cursor-not-allowed disabled:opacity-40 md:flex"
               >
-                <RotateCcw className="size-3.5" /> Start over
+                <RotateCcw className="size-3.5" /> New Brief
               </button>
             ) : null}
           </div>
@@ -2052,7 +2105,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-red-600">
-                            Work route · select to continue
+                            Type of Content Brief · select to continue
                           </p>
                           <p className="mt-2 text-base font-semibold">
                             {analysis.questions.find(
@@ -2095,8 +2148,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
                             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-black/40">
-                              {field.label}
-                              {field.id === 'requestTypes' ? ' · determines the form' : ''}
+                              {scopeFieldLabel(field, proposalValues)}
                             </p>
                             <p className="mt-2 [overflow-wrap:anywhere] text-base font-semibold leading-6">
                               {displayValue(field, proposal.values, documents)}
@@ -2130,6 +2182,19 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                               {sourceLabel(proposal.source, documents)}
                             </strong>
                             {proposal.source.excerpt ? ` — ${proposal.source.excerpt}` : ''}
+                            {proposal.source.webUrl ? (
+                              <>
+                                {' · '}
+                                <a
+                                  href={proposal.source.webUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline"
+                                >
+                                  Web source
+                                </a>
+                              </>
+                            ) : null}
                           </span>
                         </div>
                         {editing === field.id ? (
@@ -2393,7 +2458,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                       </>
                     ) : (
                       <>
-                        <img src={googleDriveFavicon} alt="" className="size-5" /> Create project in Drive
+                        <img src={googleDriveFavicon} alt="" className="size-5" /> Create project in
+                        Drive
                       </>
                     )}
                   </Button>
@@ -2448,7 +2514,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                     }
                     className="h-12 rounded-full px-6 text-base"
                   >
-                    <RotateCcw className="size-5" /> Request a new brief
+                    <RotateCcw className="size-5" /> New Brief
                   </Button>
                 </>
               ) : null}
@@ -2524,24 +2590,10 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                     {warning}
                   </p>
                 ))}
-                {jiraPreview.existing ? (
-                  <div className="mt-4">
-                    <Button
-                      asChild
-                      variant="secondary"
-                      className="h-12 rounded-full px-6 text-base"
-                    >
-                      <a href={jiraPreview.existing.url} target="_blank" rel="noreferrer">
-                        <img src={jiraFavicon} alt="" className="size-5" /> Open Jira Task{' '}
-                        {jiraPreview.existing.key}
-                      </a>
-                    </Button>
-                    {jiraPreview.existing.briefChanged ? (
-                      <p className="mt-2 text-amber-800">
-                        This brief changed after the Task was created.
-                      </p>
-                    ) : null}
-                  </div>
+                {jiraPreview.existing?.briefChanged ? (
+                  <p className="mt-4 text-amber-800">
+                    This brief changed after the Task was created.
+                  </p>
                 ) : null}
                 {!jiraPreview.creating && !jiraPreview.existing ? (
                   <Button
@@ -2564,6 +2616,20 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                   </Button>
                 ) : null}
               </section>
+            ) : null}
+            {reviewOrigin === 'library' && jiraTask ? (
+              <div className="mt-5 rounded-2xl border border-black/10 bg-white p-4 text-sm">
+                <p className="font-semibold">Jira Task created</p>
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="mt-2 h-12 rounded-full px-6 text-base"
+                >
+                  <a href={jiraTask.url} target="_blank" rel="noreferrer">
+                    <img src={jiraFavicon} alt="" className="size-5" /> Open Jira Task {jiraTask.key}
+                  </a>
+                </Button>
+              </div>
             ) : null}
             {reviewOrigin === 'library' && driveProject?.fingerprint === driveFingerprint ? (
               <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">

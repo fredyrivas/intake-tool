@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { posix } from 'node:path';
 import {
   presentationMimeType,
   spreadsheetMimeType,
@@ -6,6 +7,10 @@ import {
 } from '../shared/brief-contract.ts';
 
 const MAX_EXTRACTED_CHARACTERS = 120_000;
+const MAX_PRESENTATION_IMAGES = 24;
+const MAX_PRESENTATION_IMAGE_BYTES = 8 * 1024 * 1024;
+
+export type PresentationImage = { slides: number[]; mimeType: string; data: string };
 
 function decodeXml(value: string) {
   return value
@@ -47,6 +52,61 @@ async function extractPowerPoint(zip: JSZip) {
     if (runs.length) output.push(`[Slide ${slide.match[1]}]\n${runs.join(' | ')}`);
   }
   return bounded(output.join('\n\n'));
+}
+
+export async function extractPowerPointImages(document: Attachment): Promise<PresentationImage[]> {
+  if (document.mimeType !== presentationMimeType) return [];
+  const zip = await JSZip.loadAsync(Buffer.from(document.data, 'base64'));
+  const images = new Map<string, PresentationImage>();
+  const slides = Object.keys(zip.files)
+    .map((path) => ({ path, number: Number(path.match(/^ppt\/slides\/slide(\d+)\.xml$/)?.[1]) }))
+    .filter((slide) => Number.isInteger(slide.number) && slide.number > 0)
+    .sort((a, b) => a.number - b.number);
+  let totalBytes = 0;
+
+  for (const slide of slides) {
+    const xml = await zip.file(slide.path)!.async('string');
+    const ids = new Set(
+      [...xml.matchAll(/<a:blip\b[^>]*\br:embed="([^"]+)"/g)].map((match) => match[1]),
+    );
+    if (!ids.size) continue;
+    const relationships = await zip
+      .file(`ppt/slides/_rels/slide${slide.number}.xml.rels`)
+      ?.async('string');
+    for (const match of relationships?.matchAll(/<Relationship\b([^>]*)\/?\s*>/g) || []) {
+      const id = match[1].match(/\bId="([^"]+)"/)?.[1];
+      const target = match[1].match(/\bTarget="([^"]+)"/)?.[1];
+      if (!id || !ids.has(id) || !target) continue;
+      const path = posix.normalize(
+        target.startsWith('/') ? target.slice(1) : posix.join('ppt/slides', target),
+      );
+      if (!path.startsWith('ppt/media/')) continue;
+      const mimeType = /\.png$/i.test(path)
+        ? 'image/png'
+        : /\.jpe?g$/i.test(path)
+          ? 'image/jpeg'
+          : null;
+      if (!mimeType) continue;
+      const existing = images.get(path);
+      if (existing) {
+        if (!existing.slides.includes(slide.number)) existing.slides.push(slide.number);
+        continue;
+      }
+      if (images.size >= MAX_PRESENTATION_IMAGES) continue;
+      const file = zip.file(path);
+      if (!file) continue;
+      const bytes = await file.async('nodebuffer');
+      if (
+        (mimeType === 'image/png' && bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') ||
+        (mimeType === 'image/jpeg' && bytes.subarray(0, 3).toString('hex') !== 'ffd8ff')
+      )
+        continue;
+      if (totalBytes + bytes.length > MAX_PRESENTATION_IMAGE_BYTES) continue;
+      totalBytes += bytes.length;
+      images.set(path, { slides: [slide.number], mimeType, data: bytes.toString('base64') });
+    }
+  }
+  return [...images.values()];
 }
 
 async function workbookSheetNames(zip: JSZip) {
@@ -116,6 +176,7 @@ export async function extractOfficeText(document: Attachment) {
     document.mimeType === presentationMimeType
       ? await extractPowerPoint(zip)
       : await extractExcel(zip);
-  if (!content.trim()) throw new Error(`No readable text was found in ${document.name}.`);
+  if (!content.trim() && document.mimeType !== presentationMimeType)
+    throw new Error(`No readable text was found in ${document.name}.`);
   return content;
 }

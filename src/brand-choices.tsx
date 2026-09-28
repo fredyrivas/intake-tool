@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { brandExceptionNotes, coreBrands } from '../shared/brief-contract';
+import { allOptionsSelected } from './multi-options';
 
 export function BrandChoices({
   value,
@@ -27,7 +28,7 @@ export function BrandChoices({
   return (
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        {coreBrands.map((brand) => (
+        {['All', ...coreBrands].map((brand) => (
           <label
             key={brand}
             className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white p-3 text-sm"
@@ -35,13 +36,19 @@ export function BrandChoices({
             <input
               type="checkbox"
               disabled={disabled}
-              checked={value.includes(brand)}
+              checked={brand === 'All' ? allOptionsSelected(coreBrands, value) : value.includes(brand)}
               onChange={() =>
-                onChange(
-                  value.includes(brand)
-                    ? value.filter((selected) => selected !== brand)
-                    : [...value, brand],
-                )
+                brand === 'All'
+                  ? onChange(
+                      allOptionsSelected(coreBrands, value)
+                        ? exceptions
+                        : [...exceptions, ...coreBrands],
+                    )
+                  : onChange(
+                      value.includes(brand)
+                        ? value.filter((selected) => selected !== brand)
+                        : [...value, brand],
+                    )
               }
               className="accent-[#7b3fc4]"
             />

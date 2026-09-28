@@ -28,6 +28,7 @@ import { BriefDocuments } from './brief-documents';
 import { sectionDescriptions, sectionFor, sectionOrder } from './brief-sections';
 import { DocumentTemplateLink, OptionalDocumentGuidance } from './document-template-link';
 import { BrandChoices } from './brand-choices';
+import { allOptionsSelected, toggleAllOptions } from './multi-options';
 
 export type Disposition = 'pending' | 'not-applicable';
 
@@ -136,8 +137,10 @@ export function FieldInput({
   if (field.options && field.type === 'multi') {
     return (
       <div className="grid gap-2 sm:grid-cols-2">
-        {field.options.map((option) => {
-          const checked = value.includes(option);
+        {['All', ...field.options].map((option) => {
+          const checked = option === 'All'
+            ? allOptionsSelected(field.options!, value)
+            : value.includes(option);
           return (
             <label
               key={option}
@@ -148,6 +151,7 @@ export function FieldInput({
                 disabled={disabled}
                 checked={checked}
                 onChange={() => {
+                  if (option === 'All') return onChange(toggleAllOptions(field.options!, value));
                   if (checked) return onChange(value.filter((item) => item !== option));
                   if (option === '__none__') return onChange(['__none__']);
                   onChange([...value.filter((item) => item !== '__none__'), option]);
@@ -198,9 +202,7 @@ export function FieldInput({
                   className="accent-[#7b3fc4]"
                 />
                 <FileText className="size-4 shrink-0 text-[#6f35b6]" />
-                <span className="min-w-0 [overflow-wrap:anywhere]">
-                  {document.name}
-                </span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{document.name}</span>
               </label>
             ))}
           </div>
@@ -400,7 +402,9 @@ export function BriefForm({
         .filter((section) => section.fields.length),
     [applicable],
   );
-  const required = applicable.filter((field) => fieldIsRequired(field, conditionalRequiredFieldIds));
+  const required = applicable.filter((field) =>
+    fieldIsRequired(field, conditionalRequiredFieldIds),
+  );
   const requiredStatuses = required.map((field) =>
     statusFor(field, values, documents, suggested, dispositions, conditionalRequiredFieldIds),
   );
@@ -594,11 +598,19 @@ export function BriefForm({
                 const cardFields = companion ? [field, companion] : [field];
                 const status = resourceGroup
                   ? statusForFields(
-                      cardFields, values, documents, suggested, dispositions,
+                      cardFields,
+                      values,
+                      documents,
+                      suggested,
+                      dispositions,
                       conditionalRequiredFieldIds,
                     )
                   : statusFor(
-                      field, values, documents, suggested, dispositions,
+                      field,
+                      values,
+                      documents,
+                      suggested,
+                      dispositions,
                       conditionalRequiredFieldIds,
                     );
                 const proposals = cardFields
@@ -719,6 +731,19 @@ export function BriefForm({
                             : source.excerpt.startsWith('Provided directly')
                               ? 'Provided directly by the requester.'
                               : 'Confirmed from the original description.'}
+                        {source.webUrl ? (
+                          <>
+                            {' · '}
+                            <a
+                              href={source.webUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline"
+                            >
+                              Web source
+                            </a>
+                          </>
+                        ) : null}
                       </p>
                     ) : null}
                     {proposals.map((proposal) => (
@@ -732,6 +757,19 @@ export function BriefForm({
                             ? ` · ${proposal.fieldId === field.id ? 'File' : 'Link'}`
                             : ''}
                           {proposal.source.excerpt ? ` — ${proposal.source.excerpt}` : ''}
+                          {proposal.source.webUrl ? (
+                            <>
+                              {' · '}
+                              <a
+                                href={proposal.source.webUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline"
+                              >
+                                Web source
+                              </a>
+                            </>
+                          ) : null}
                         </p>
                         <Button
                           type="button"
