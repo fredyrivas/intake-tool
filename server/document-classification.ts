@@ -1,4 +1,5 @@
 import {
+  documentRoles,
   parseAnalysis,
   type Analysis,
   type Attachment,
@@ -36,7 +37,7 @@ export function applyDocumentClassifications(
     const document = documentById.get(item.documentId);
     if (
       !document ||
-      !['creativeDirection', 'contentMatrix', 'assetMatrix', 'other'].includes(item.fieldId) ||
+      !documentRoles.includes(item.fieldId) ||
       !Number.isInteger(item.page) ||
       item.page < 0 ||
       typeof item.excerpt !== 'string' ||

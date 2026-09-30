@@ -1,5 +1,7 @@
+import type { AnalysisProgress } from '../shared/brief-contract.ts';
+
 type JobResult = { status: number; data: unknown };
-type Job = { expiresAt: number; result?: JobResult };
+type Job = { expiresAt: number; result?: JobResult; progress?: AnalysisProgress };
 
 // Local development jobs only. Keep completed results long enough for a delayed poll,
 // without retaining uploaded documents or an unbounded history in memory.
@@ -9,12 +11,15 @@ export function createAnalysisJobs(now = Date.now) {
     for (const [id, job] of jobs) if (job.expiresAt <= now()) jobs.delete(id);
   }
   return {
-    start() {
+    start(id = crypto.randomUUID()) {
       prune();
       while (jobs.size >= 20) jobs.delete(jobs.keys().next().value!);
-      const id = crypto.randomUUID();
       jobs.set(id, { expiresAt: now() + 10 * 60_000 });
       return id;
+    },
+    update(id: string, progress: AnalysisProgress) {
+      const job = jobs.get(id);
+      if (job && !job.result) job.progress = progress;
     },
     finish(id: string, status: number, data: unknown) {
       const job = jobs.get(id);
@@ -29,9 +34,9 @@ export function createAnalysisJobs(now = Date.now) {
       if (!job)
         return {
           status: 404,
-          data: { error: 'Analysis expired or the server restarted. Please retry.' },
+          data: { code: 'ANALYSIS_JOB_UNAVAILABLE', requestId: id, error: 'Analysis expired or the server restarted. Please retry.' },
         };
-      return job.result ?? { status: 202, data: { jobId: id, status: 'running' } };
+      return job.result ?? { status: 202, data: { jobId: id, status: 'running', progress: job.progress } };
     },
   };
 }

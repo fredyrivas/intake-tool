@@ -24,37 +24,21 @@ pdf += `xref\n0 6\n0000000000 65535 f \n${offsets
   .slice(1)
   .map((n) => String(n).padStart(10, '0') + ' 00000 n \n')
   .join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-const response = await fetch(`http://127.0.0.1:${port}/api/brief/analyze`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    values: {
-      brand: ['Glade'],
-      region: ['USA'],
-      assetType: ['Ecomm'],
-      requestTypes: ['ACCELERATE'],
-      accelerateDeliverables: ['eComm digital retailer pages assets'],
-      deliveryTypes: ['Ecomm (Salsify)'],
-      needsOpenFiles: ['No'],
-      expectedDeliveryDate: ['2026-10-15'],
-    },
-    documents: [
-      {
-        id: 'synthetic-pdf',
-        name: 'synthetic-brief.pdf',
-        mimeType: 'application/pdf',
-        data: Buffer.from(pdf).toString('base64'),
-      },
-    ],
-    notes: '',
-    message: 'Extract the explicit project name, retailer and count from this test PDF.',
-    dispositions: {},
-    rejected: [],
-  }),
-  signal: AbortSignal.timeout(110000),
-});
-const result = await response.json();
-assert.equal(response.status, 200, JSON.stringify(result));
+const documents = [{ id: 'synthetic-pdf', name: 'synthetic-brief.pdf', mimeType: 'application/pdf', data: Buffer.from(pdf).toString('base64') }];
+const intent = 'Adapt the existing annual campaign for Amazon product pages. Extract the supported title, retailer and count.';
+async function analyze(phase, context = null) {
+  const response = await fetch(`http://127.0.0.1:${port}/api/brief/analyze`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phase, context, intent, values: {}, documents: documents.map((document) => ({ ...document, data: phase === 'document-reading' ? document.data : '' })), notes: '', message: intent, dispositions: {}, rejected: [] }),
+    signal: AbortSignal.timeout(5 * 60_000),
+  });
+  const result = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(result));
+  return result;
+}
+const reading = await analyze('document-reading');
+assert.ok(reading.context.latestInteractionId);
+const result = await analyze('scope', reading.context);
 assert.ok(result.analysis.summary);
 assert.ok(
   result.analysis.proposals.some(
@@ -69,7 +53,7 @@ assert.ok(
 console.log(
   JSON.stringify(
     {
-      status: response.status,
+      status: 200,
       version: result.instructionVersion,
       proposedFields: result.analysis.proposals.map((p) => p.fieldId),
       questions: result.analysis.questions.map((q) => q.fieldId),

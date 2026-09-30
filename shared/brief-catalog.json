@@ -1,0 +1,1496 @@
+{
+  "version": "1",
+  "modules": [
+    {
+      "id": "01",
+      "title": "General information",
+      "requiredDefault": true,
+      "fields": [
+        {
+          "id": "projectName",
+          "label": "Project name",
+          "type": "text"
+        },
+        {
+          "id": "projectTitle",
+          "label": "Project title",
+          "type": "text"
+        },
+        {
+          "id": "brand",
+          "label": "Brand",
+          "type": "multi",
+          "options": [
+            "Glade",
+            "Drano",
+            "Scrubbing Bubbles",
+            "Ziploc",
+            "Windex",
+            "Pledge",
+            "OFF!",
+            "Raid",
+            "STEM",
+            "Thermacell",
+            "Baygon",
+            "Scale"
+          ]
+        },
+        {
+          "id": "region",
+          "label": "Region",
+          "type": "multi",
+          "options": [
+            "USA",
+            "Canada",
+            "Puerto Rico",
+            "Dominican Republic",
+            "Other"
+          ]
+        },
+        {
+          "id": "mainApproverEmail",
+          "label": "Main approver (email)",
+          "type": "email"
+        },
+        {
+          "id": "reviewerEmails",
+          "label": "Reviewers / project contributors (email)",
+          "type": "emails",
+          "required": false
+        },
+        {
+          "id": "assetType",
+          "label": "Asset type",
+          "type": "select",
+          "options": [
+            "Ecomm",
+            "ATL",
+            "Shopper"
+          ]
+        },
+        {
+          "id": "expectedDeliveryDate",
+          "label": "Expected delivery date",
+          "type": "date"
+        },
+        {
+          "id": "mediaPlacementRetailer",
+          "label": "Media placement / retailer",
+          "type": "text"
+        },
+        {
+          "id": "totalAssets",
+          "label": "Total number of assets",
+          "type": "number"
+        },
+        {
+          "id": "creativeDirection",
+          "label": "Creative Direction (template)",
+          "type": "document",
+          "template": {
+            "label": "Creative Direction template",
+            "url": "https://docs.google.com/presentation/d/1rN2L-kF1H-qEuBvmree7RadybgNM2EvT/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true"
+          }
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "title": "Content brief",
+      "requiredDefault": false,
+      "fields": [
+        {
+          "id": "requestTypes",
+          "label": "Type of Content Brief",
+          "type": "multi",
+          "options": [
+            "CREATE",
+            "EVOLVE",
+            "ACCELERATE",
+            "INNOVATE",
+            ".com Copy Optimization",
+            "QR Generation Request",
+            "Delivery only"
+          ]
+        },
+        {
+          "id": "createDeliverables",
+          "label": "CREATE deliverables",
+          "type": "multi",
+          "options": [
+            "National campaign films / TVC",
+            "National campaign films / CTV",
+            "National campaign films / OLV",
+            "National campaign films / Social",
+            "Evergreen content / Sponsored videos",
+            "Evergreen content / OLV",
+            "Evergreen content / Social",
+            "Evergreen content / Statics",
+            "Big idea production"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "businessContext",
+          "label": "Business context / objective",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "consumerInsights",
+          "label": "Consumer insights driving the work",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "audience",
+          "label": "Audience",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "askGoal",
+          "label": "The ask & goal",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "communicationObjective",
+          "label": "Communication objective",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "consumerTakeaway",
+          "label": "Consumers takeaway (emotional / functional)",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "mandatories",
+          "label": "Mandatories",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "outOfScope",
+          "label": "Out of scope",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "research",
+          "label": "Research and insights",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "creativeNotes",
+          "label": "Additional notes or context",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "creativeReferences",
+          "label": "Attachments / visual references",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "CREATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "evolveDeliverables",
+          "label": "EVOLVE deliverables",
+          "type": "multi",
+          "options": [
+            "Social",
+            "Static",
+            "Promotional",
+            "HTVs",
+            "Adapts / refreshes"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "annualCampaign",
+          "label": "Annual campaign / reference deck (file)",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "annualCampaignLink",
+          "label": "Annual campaign / reference deck (link)",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "contentMatrix",
+          "label": "Content matrix (file)",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "contentMatrixLink",
+          "label": "Content matrix (link)",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "assetMatrix",
+          "label": "Completed asset matrix",
+          "type": "document",
+          "template": {
+            "label": "Asset Matrix",
+            "url": "https://docs.google.com/spreadsheets/d/1hi-6wABS63b-KmD4ZJE1OyMOW_FC98JN/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true"
+          },
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE",
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "assetMatrixLink",
+          "label": "Completed asset matrix (link)",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE",
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "workDescription",
+          "label": "Work instructions",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE",
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "supportingReferences",
+          "label": "Creative references / supporting files",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE",
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "supportingLinks",
+          "label": "Creative references / supporting links",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE",
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "partnershipContext",
+          "label": "Partnership context (if applicable)",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "evolveNeeds",
+          "label": "EVOLVE production needs",
+          "type": "multi",
+          "options": [
+            "Specific music",
+            "Stock materials",
+            "VO recording",
+            "Translation",
+            "__none__"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "musicDetails",
+          "label": "Music details",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "Specific music"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "musicReferences",
+          "label": "Music reference files",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "Specific music"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "voLanguage",
+          "label": "Voice-over market / language",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "VO recording"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "castingBrief",
+          "label": "Casting brief (talents, gender, tone, age)",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "VO recording"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "buyoutDetails",
+          "label": "Buyout details (duration, countries, media, usage)",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "VO recording"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "accelerateDeliverables",
+          "label": "ACCELERATE deliverables",
+          "type": "multi",
+          "options": [
+            "eComm digital retailer pages assets",
+            "eComm Video",
+            "Shopper / Media and printed non-displays",
+            "Shopper / 3D display"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "assetSubtype",
+          "label": "Asset subtype",
+          "type": "multi",
+          "options": [
+            "Base+ tiles",
+            "Beauty Shots",
+            "Brand store assets",
+            "Collection video",
+            "Mobile hero images",
+            "Enhanced content",
+            "Marketing copy"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "accelerateDeliverables",
+              "any": [
+                "eComm digital retailer pages assets"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "vizitLink",
+          "label": "BOS VIZIT folder link (if applicable)",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "accelerateDeliverables",
+              "any": [
+                "eComm digital retailer pages assets"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "videoSpecs",
+          "label": "Video work instructions and specifications",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "accelerateDeliverables",
+              "any": [
+                "eComm Video"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "accelerateNeeds",
+          "label": "ACCELERATE production needs",
+          "type": "multi",
+          "options": [
+            "Stock materials",
+            "Translation",
+            "__none__"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "stockAvailability",
+          "label": "Stock availability",
+          "type": "select",
+          "options": [
+            "I have stock materials",
+            "Help me find stock materials"
+          ]
+        },
+        {
+          "id": "stockMaterials",
+          "label": "Stock materials (file)",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "stockAvailability",
+              "any": [
+                "I have stock materials"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "stockMaterialsLink",
+          "label": "Stock materials (link)",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "stockAvailability",
+              "any": [
+                "I have stock materials"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "stockDirection",
+          "label": "Stock references / direction",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "stockAvailability",
+              "any": [
+                "Help me find stock materials"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "translationLanguage",
+          "label": "Translation market / language",
+          "type": "multi",
+          "options": [
+            "US_EN",
+            "US_ES",
+            "CA_EN",
+            "CA_FR",
+            "PR_ES",
+            "PR_EN",
+            "DO_ES",
+            "Other"
+          ]
+        },
+        {
+          "id": "translationInstructions",
+          "label": "Translation instructions",
+          "type": "text"
+        },
+        {
+          "id": "translationCopy",
+          "label": "Copy document for translation",
+          "type": "document"
+        },
+        {
+          "id": "otherProductionNotes",
+          "label": "Other production notes",
+          "type": "text",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE",
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "otherProductionFiles",
+          "label": "Other production attachments",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "adaptInstructions",
+          "label": "Adapt instructions",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "marketingCopy",
+          "label": "Marketing copy instructions (if applicable)",
+          "type": "document",
+          "template": {
+            "label": "Marketing Copy Checklist",
+            "url": "https://docs.google.com/spreadsheets/d/1JbjhagCpaqqC6Y5h62auDbciqLqzrg7u/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true"
+          },
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "innovateDeliverables",
+          "label": "INNOVATE deliverables",
+          "type": "multi",
+          "options": [
+            "KV",
+            "PDP assets",
+            "B+ tiles",
+            "Brand page content",
+            "In-store display",
+            "HTVs / sponsored brand videos",
+            "Social post"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "INNOVATE"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "copyServices",
+          "label": "Copy services",
+          "type": "multi",
+          "options": [
+            "Copy Optimization",
+            "FAQ creation",
+            "New Article Review"
+          ],
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                ".com Copy Optimization"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "knowledgeBase",
+          "label": "Tone of voice, product information and legal guidelines",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                ".com Copy Optimization"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "copyLinks",
+          "label": "Articles to optimize",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                ".com Copy Optimization"
+              ]
+            },
+            {
+              "field": "copyServices",
+              "any": [
+                "Copy Optimization"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "faqLinks",
+          "label": "Articles for FAQ creation",
+          "type": "link",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                ".com Copy Optimization"
+              ]
+            },
+            {
+              "field": "copyServices",
+              "any": [
+                "FAQ creation"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "newArticles",
+          "label": "New articles for review",
+          "type": "document",
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                ".com Copy Optimization"
+              ]
+            },
+            {
+              "field": "copyServices",
+              "any": [
+                "New Article Review"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qrTemplate",
+          "label": "Completed QR Template form",
+          "type": "document",
+          "template": {
+            "label": "QR Code Request Form",
+            "url": "https://docs.google.com/document/d/1zOvViSpfrOCo3hvYb0ar4IttLg2WnipP/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true"
+          },
+          "when": [
+            {
+              "field": "requestTypes",
+              "any": [
+                "QR Generation Request"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "title": "Delivery type",
+      "requiredDefault": false,
+      "fields": [
+        {
+          "id": "deliveryTypes",
+          "label": "Delivery methods",
+          "type": "multi",
+          "options": [
+            "Directly to vendor / 3rd party",
+            "Directly to media agency",
+            "Directly to SCJ marketer",
+            "Extreme Reach (TVC)",
+            "Social posting",
+            "Digital Shopper",
+            "Ecomm (Salsify)",
+            "Other delivery need"
+          ]
+        },
+        {
+          "id": "vendorDetails",
+          "label": "Vendor delivery instructions & contact details",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Directly to vendor / 3rd party"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "vendorInstructions",
+          "label": "Vendor delivery instructions file",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Directly to vendor / 3rd party"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "agencyDetails",
+          "label": "Media agency delivery instructions & contact details",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Directly to media agency"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "agencyInstructions",
+          "label": "Media agency delivery instructions file",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Directly to media agency"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "otherDeliveryDetails",
+          "label": "Other delivery instructions & contact details",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Other delivery need"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "otherDeliveryInstructions",
+          "label": "Other delivery instructions file",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Other delivery need"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "firstAirDate",
+          "label": "First air date",
+          "type": "date",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "endAirDate",
+          "label": "End air date",
+          "type": "date",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "mediaPlan",
+          "label": "Media plan",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "mediaPlanLink",
+          "label": "Media plan link",
+          "type": "link",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "preClearance",
+          "label": "Pre-clearance requirement",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "clearance",
+          "label": "Clearance requirement",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "localClearance",
+          "label": "Local-clearance information",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Extreme Reach (TVC)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "socialDestinations",
+          "label": "Social destinations",
+          "type": "multi",
+          "options": [
+            "YouTube",
+            "Social",
+            "Other"
+          ],
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "youtubeInstructions",
+          "label": "YouTube titles, descriptions and posting dates per asset",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            },
+            {
+              "field": "socialDestinations",
+              "any": [
+                "YouTube"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "youtubeFiles",
+          "label": "YouTube instructions file",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            },
+            {
+              "field": "socialDestinations",
+              "any": [
+                "YouTube"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "socialInstructions",
+          "label": "Social copy and posting dates per asset",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            },
+            {
+              "field": "socialDestinations",
+              "any": [
+                "Social"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "socialFiles",
+          "label": "Social instructions file",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            },
+            {
+              "field": "socialDestinations",
+              "any": [
+                "Social"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "otherSocialInstructions",
+          "label": "Other social destination instructions per asset",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Social posting"
+              ]
+            },
+            {
+              "field": "socialDestinations",
+              "any": [
+                "Other"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "shopperCopy",
+          "label": "Digital Shopper copy instructions per asset",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Digital Shopper"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceTemplate",
+          "label": "E-commerce delivery-details template",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceMode",
+          "label": "Should assets append or replace existing assets?",
+          "type": "select",
+          "options": [
+            "Append",
+            "Replace"
+          ],
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceOrder",
+          "label": "Should assets appear in a specific order?",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceProperties",
+          "label": "E-commerce properties",
+          "type": "multi",
+          "options": [
+            "Base",
+            "Base+",
+            "Enhanced content",
+            "eRetailer specific"
+          ],
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceInstructions",
+          "label": "E-commerce delivery instructions (if applicable)",
+          "type": "text",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ecommerceFiles",
+          "label": "E-commerce delivery files",
+          "type": "document",
+          "when": [
+            {
+              "field": "deliveryTypes",
+              "any": [
+                "Ecomm (Salsify)"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "needsOpenFiles",
+          "label": "Editable files",
+          "type": "select",
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "title": "Additional notes and attachments",
+      "requiredDefault": false,
+      "fields": [
+        {
+          "id": "notes",
+          "label": "Additional notes",
+          "type": "text"
+        },
+        {
+          "id": "attachments",
+          "label": "Additional attachments",
+          "type": "document"
+        },
+        {
+          "id": "links",
+          "label": "Additional links",
+          "type": "link"
+        }
+      ]
+    }
+  ],
+  "sharedPolicies": {
+    "privateFieldIds": [],
+    "alternativeFieldGroups": [
+      [
+        "annualCampaign",
+        "annualCampaignLink"
+      ],
+      [
+        "contentMatrix",
+        "contentMatrixLink"
+      ],
+      [
+        "assetMatrix",
+        "assetMatrixLink"
+      ],
+      [
+        "supportingReferences",
+        "supportingLinks"
+      ],
+      [
+        "stockMaterials",
+        "stockMaterialsLink"
+      ],
+      [
+        "mediaPlan",
+        "mediaPlanLink"
+      ],
+      [
+        "attachments",
+        "links"
+      ]
+    ],
+    "specialActivation": [
+      {
+        "fieldIds": [
+          "stockAvailability"
+        ],
+        "whenAny": [
+          [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "Stock materials"
+              ]
+            }
+          ],
+          [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "accelerateNeeds",
+              "any": [
+                "Stock materials"
+              ]
+            }
+          ]
+        ]
+      },
+      {
+        "fieldIds": [
+          "translationLanguage",
+          "translationInstructions",
+          "translationCopy"
+        ],
+        "whenAny": [
+          [
+            {
+              "field": "requestTypes",
+              "any": [
+                "EVOLVE"
+              ]
+            },
+            {
+              "field": "evolveNeeds",
+              "any": [
+                "Translation"
+              ]
+            }
+          ],
+          [
+            {
+              "field": "requestTypes",
+              "any": [
+                "ACCELERATE"
+              ]
+            },
+            {
+              "field": "accelerateNeeds",
+              "any": [
+                "Translation"
+              ]
+            }
+          ]
+        ]
+      }
+    ],
+    "documentRoles": [
+      "creativeDirection",
+      "contentMatrix",
+      "assetMatrix",
+      "other"
+    ]
+  }
+}

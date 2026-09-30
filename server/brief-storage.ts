@@ -11,6 +11,8 @@ import {
   type Values,
 } from '../shared/brief-contract.ts';
 
+import { restoreAnalysisContext } from '../shared/brief-context.ts';
+
 const maxRequestBytes = 22 * 1024 * 1024;
 
 type StoredBrief = {
@@ -87,9 +89,11 @@ function validatePayload(value: unknown) {
   const payload = value as { draft?: unknown; documents?: unknown };
   if (!payload.draft || typeof payload.draft !== 'object' || Array.isArray(payload.draft))
     throw new Error('Invalid brief.');
+  const documents = validateDocuments(payload.documents);
+  const draft = payload.draft as Record<string, unknown>;
   return {
-    draft: payload.draft as Record<string, unknown>,
-    documents: validateDocuments(payload.documents),
+    draft: { ...draft, context: restoreAnalysisContext(draft.context, documents) } as Record<string, unknown>,
+    documents,
   };
 }
 

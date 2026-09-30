@@ -1,11 +1,10 @@
 import { GoogleGenAI, ThinkingLevel, type Part } from '@google/genai';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   activeFields,
-  analysisForActivePath,
   modelFields,
-  privateFieldIds,
   cleanValues,
   fileLimits,
   fileTypes,
@@ -16,15 +15,28 @@ import {
 } from '../shared/brief-contract.ts';
 import {
   analysisSchemaForPhase,
-  BRIEF_SYSTEM_INSTRUCTION,
+  systemInstructionForPhase,
+  catalogForPhase,
   BRIEF_INSTRUCTION_VERSION,
+  ROUTE_DECISION_GUIDE,
 } from './brief-instruction.ts';
 import { extractOfficeText, extractPowerPointImages } from './office-text.ts';
-import { applyDocumentClassifications } from './document-classification.ts';
-import { validateRetailerWebEvidence } from './web-evidence.ts';
+import {
+  finishInteraction,
+  interactionInput,
+  interactionResponse,
+  interactionDiagnostics,
+  settleInteraction,
+  InteractionOutputError,
+} from './brief-interaction.ts';
+import { digest, restoreAnalysisContext } from '../shared/brief-context.ts';
 import { createAnalysisJobs } from './analysis-jobs.ts';
+import { analysisFailure, createDiagnosticJournal, type AnalysisDiagnostic } from './analysis-errors.ts';
 
 function reply(response: ServerResponse, status: number, data: unknown) {
+  const payload = data as { requestId?: string; jobId?: string; trace?: AiRequestTrace };
+  const requestId = payload.requestId ?? payload.trace?.id ?? payload.jobId;
+  if (requestId) response.setHeader?.('X-Request-ID', requestId);
   response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify(data));
 }
@@ -46,6 +58,7 @@ export async function readAnalysisRequest(request: IncomingMessage) {
   )
     throw new Error('Invalid documents.');
   const phase: AnalysisPhase = [
+    'document-reading',
     'scope',
     'document-enrichment',
     'follow-up',
@@ -65,7 +78,7 @@ export async function readAnalysisRequest(request: IncomingMessage) {
       d.name.length > 200 ||
       !fileTypes.includes(d.mimeType) ||
       typeof d.data !== 'string' ||
-      (phase === 'scope' && !d.data) ||
+      (phase === 'document-reading' && !d.data) ||
       d.data.length % 4 !== 0 ||
       !/^[A-Za-z0-9+/]*={0,2}$/.test(d.data)
     )
@@ -125,7 +138,16 @@ export async function readAnalysisRequest(request: IncomingMessage) {
         .filter((id: unknown) => typeof id === 'string' && modelFields.some((f) => f.id === id))
         .slice(0, 100)
     : [];
+  const intent = typeof input.intent === 'string' ? input.intent : input.message;
+  if (intent.length > 12000) throw new Error('Invalid intent.');
+  let context = restoreAnalysisContext(input.context, documents);
+  for (const document of documents.filter((doc) => doc.data)) {
+    const previous = context?.documents.find((stamp) => stamp.id === document.id);
+    if (previous && previous.digest !== await digest(document.data)) context = null;
+  }
   return {
+    intent,
+    context,
     phase,
     documents,
     values: cleanValues(input.values, documents),
@@ -179,6 +201,14 @@ export function selectModel(
       input.message,
     );
 
+  if (input.phase === 'document-reading') {
+    return {
+      model: config.routingModel,
+      thinkingLevel: ThinkingLevel.MEDIUM,
+      reason: 'Source reading extracts facts and evidence from the attached documents.',
+    };
+  }
+
   if (input.phase === 'scope') {
     return {
       model: config.routingModel,
@@ -218,7 +248,7 @@ export function selectModel(
     return {
       model: config.extractionModel,
       thinkingLevel: ThinkingLevel.LOW,
-      reason: 'Final review is structurally complete and only needs a concise summary pass.',
+      reason: 'Final review maps retained evidence to active optional fields and summarizes the brief.',
     };
   }
 
@@ -238,12 +268,14 @@ export function briefAnalysisPlugin(config: {
   location: string;
   routingModel: string;
   extractionModel: string;
-}): Plugin {
+}, interactions?: GoogleGenAI['interactions'], journal = createDiagnosticJournal(),
+wait = (ms: number, signal: AbortSignal) => delay(ms, undefined, { signal })): Plugin {
   const client = new GoogleGenAI({
     vertexai: true,
     project: config.project,
-    location: config.location,
+    location: 'global',
   });
+  const interactionClient = interactions ?? client.interactions;
   let busy = false;
   const jobs = createAnalysisJobs();
   const middleware = async (
@@ -253,6 +285,17 @@ export function briefAnalysisPlugin(config: {
   ) => {
     if (request.url?.split('?')[0] !== '/api/brief/analyze') return next();
     const query = new URLSearchParams(request.url?.split('?')[1]);
+    const requestId = crypto.randomUUID();
+    const receivedAt = new Date().toISOString();
+    const reject = async (status: number, code: string, error: string, id: string = requestId) => {
+      const diagnostic: AnalysisDiagnostic = { requestId: id, createdAt: receivedAt,
+        httpStatus: status, code, origin: 'server', failureStage: 'request' };
+      console.info('[brief-analysis] result', JSON.stringify(diagnostic));
+      try { await journal(diagnostic); } catch {
+        console.error('[brief-analysis] diagnostic journal unavailable', { requestId: id });
+      }
+      return reply(response, status, { code, error, requestId: id, diagnostic });
+    };
     // This endpoint is development-only and uses the local user's ADC; production needs real auth.
     const host = request.headers.host || '';
     if (
@@ -261,83 +304,90 @@ export function briefAnalysisPlugin(config: {
       (request.method === 'POST' && !request.headers['content-type']?.startsWith('application/json')) ||
       request.headers['sec-fetch-site'] === 'cross-site'
     )
-      return reply(response, 403, { error: 'Local same-origin requests only.' });
+      return reject(403, 'ANALYSIS_ACCESS_DENIED', 'Local same-origin requests only.');
     if (request.method === 'GET' && query.has('job')) {
-      const result = jobs.get(query.get('job')!);
+      const id = query.get('job')!;
+      if (!/^[a-zA-Z0-9-]{1,80}$/.test(id))
+        return reject(400, 'INVALID_JOB_REFERENCE', 'Invalid analysis reference.');
+      const result = jobs.get(id);
+      if (result.status === 404)
+        return reject(404, 'ANALYSIS_JOB_UNAVAILABLE', 'Analysis expired or the server restarted. Please retry.', id);
       return reply(response, result.status, result.data);
     }
-    if (request.method !== 'POST') return reply(response, 405, { error: 'Method not allowed.' });
+    if (request.method !== 'POST') return reject(405, 'ANALYSIS_METHOD_NOT_ALLOWED', 'Method not allowed.');
     if (busy)
-      return reply(response, 429, { error: 'An analysis is already running. Try again shortly.' });
+      return reject(429, 'ANALYSIS_BUSY', 'An analysis is already running. Try again shortly.');
     busy = true;
     let attemptedTrace: AiRequestTrace | null = null;
     let generationSignal: AbortSignal | undefined;
     let jobId: string | undefined;
-    const finish = (status: number, data: unknown) => {
-      if (jobId) jobs.finish(jobId, status, data);
-      else reply(response, status, data);
+    let chained = false;
+    let failureStage: NonNullable<AiRequestTrace['failureStage']> = 'preparation';
+    const finish = async (status: number, data: { code?: string; trace?: AiRequestTrace; [key: string]: unknown }, failure?: ReturnType<typeof analysisFailure>) => {
+      const diagnostic: AnalysisDiagnostic = {
+        requestId, createdAt: receivedAt, httpStatus: status,
+        code: data.code ?? 'ANALYSIS_COMPLETED',
+        origin: failure?.origin ?? data.trace?.origin ?? 'server',
+        failureStage: failure?.failureStage ?? data.trace?.failureStage,
+        providerStatus: failure?.providerStatus ?? data.trace?.providerStatus,
+        trace: data.trace,
+      };
+      console.info('[brief-analysis] result', JSON.stringify(diagnostic));
+      // Journal errors are handled separately so they cannot mask the analysis result.
+      try { await journal(diagnostic); } catch {
+        console.error('[brief-analysis] diagnostic journal unavailable', { requestId });
+      }
+      const payload = { ...data, requestId, diagnostic };
+      if (jobId) jobs.finish(jobId, status, payload);
+      else reply(response, status, payload);
     };
     try {
       let input: Awaited<ReturnType<typeof readAnalysisRequest>>;
       try {
         input = await readAnalysisRequest(request);
-      } catch {
-        return reply(response, 400, {
-          error:
-            'Check the files and message. Use up to 6 PDF, PPTX, XLSX, TXT, PNG or JPEG files, 8 MB each and 15 MB total.',
-        });
+      } catch (error) {
+        const failure = analysisFailure(error, 'request');
+        await finish(failure.httpStatus, { code: failure.code, error: failure.error }, failure);
+        return;
       }
+      const selection = selectModel(input, config);
+      attemptedTrace = {
+        id: requestId, createdAt: receivedAt, phase: input.phase,
+        model: selection.model, thinkingLevel: String(selection.thinkingLevel).toUpperCase() as AiRequestTrace['thinkingLevel'],
+        reason: selection.reason, durationMs: 0,
+        inputTokens: null, outputTokens: null, thinkingTokens: null, totalTokens: null,
+        configurationVersion: BRIEF_INSTRUCTION_VERSION,
+      };
       if (query.get('async') === '1') {
-        jobId = jobs.start();
-        reply(response, 202, { jobId, status: 'running' });
+        jobId = jobs.start(requestId);
+        jobs.update(jobId, { phase: input.phase, stage: 'preparation' });
+        reply(response, 202, jobs.get(jobId).data);
       }
       const preparationStartedAt = Date.now();
       const contentDocuments = input.documents.filter((document) => document.data);
-      const catalog =
-        input.phase === 'scope'
-          ? modelFields
-          : activeFields(input.values).filter(
-              (field) =>
-                !privateFieldIds.has(field.id) &&
-                (input.phase === 'document-enrichment' ||
-                  field.required ||
-                  field.id === 'requestTypes' ||
-                  (input.phase === 'final-review' &&
-                    Boolean(input.values[field.id]?.length || input.dispositions[field.id]))),
-            );
-      const confirmed = Object.fromEntries(
-        Object.entries(input.values).filter(([fieldId]) => !privateFieldIds.has(fieldId)),
-      );
+      if (input.phase !== 'document-reading' && (!input.context || input.context.intentDigest !== await digest(input.intent.trim()) || (input.phase !== 'document-enrichment' && input.documents.some((doc) => !input.context!.documents.some((stamp) => stamp.id === doc.id))))) {
+        const failure = analysisFailure(Object.assign(new Error(), { status: 404 }), 'preparation', false, true);
+        await finish(409, { code: failure.code, error: failure.error,
+          trace: { ...attemptedTrace, outcome: 'failed', errorCode: failure.code, failureStage: 'preparation', origin: 'server', httpStatus: 409 },
+        });
+        return;
+      }
+      const catalog = catalogForPhase(input.phase, input.values, input.documents);
+      const confirmed = input.values;
       const parts: Part[] = [
         {
           text: JSON.stringify({
             instructionVersion: BRIEF_INSTRUCTION_VERSION,
             workflowPhase: input.phase,
-            routeDecisionGuide:
-              input.phase === 'scope'
-                ? {
-                    policy:
-                      'Choose every route explicitly supported by the request. Do not add routes only because a document mentions several channels; ask when the intended route remains ambiguous.',
-                    routes: {
-                      CREATE: 'Net-new production or a new creative idea that is not NPD.',
-                      EVOLVE: 'Adaptation or refresh of an existing ATL or annual campaign.',
-                      ACCELERATE:
-                        'E-commerce, digital retailer page or Shopper BTL creation/adaptation.',
-                      INNOVATE: 'Net-new assets for a new-product launch (NPD) at scale.',
-                      '.com Copy Optimization':
-                        'Copy optimization, FAQ creation or review of online articles.',
-                      'QR Generation Request': 'A request specifically to generate a QR code.',
-                      'Delivery only':
-                        'No creation or adaptation; existing assets only need to be delivered.',
-                    },
-                  }
-                : undefined,
+            routeDecisionGuide: input.phase === 'scope' ? ROUTE_DECISION_GUIDE : undefined,
             catalog,
             confirmed,
             dispositions: input.dispositions,
             rejectedFieldIds: input.rejected,
             notes: input.notes,
+            intent: input.intent,
             latestMessage: input.message,
+            documentClassifications: input.context?.reading.documentClassifications,
             previousConversation: input.conversation,
             unconfirmedProposals: input.pendingProposals,
             documents: input.documents.map(({ id, name, mimeType }) => ({ id, name, mimeType })),
@@ -368,14 +418,13 @@ export function briefAnalysisPlugin(config: {
         else if (!officeText)
           parts.push({ inlineData: { mimeType: doc.mimeType, data: doc.data } });
       }
-      const selection = selectModel(input, config);
       const searchRetailer =
         (input.phase === 'scope' || input.phase === 'document-enrichment') &&
         !input.values.mediaPlacementRetailer?.length;
-      const requestId = jobId ?? crypto.randomUUID();
       const startedAt = Date.now();
       const createdAt = new Date(startedAt).toISOString();
       attemptedTrace = {
+        ...attemptedTrace,
         id: requestId,
         phase: input.phase,
         model: selection.model,
@@ -414,78 +463,179 @@ export function briefAnalysisPlugin(config: {
       );
       // Uploaded documents can require a longer multimodal pass. Async callers
       // poll short requests instead of holding an HTTP connection for this budget.
-      generationSignal = AbortSignal.timeout(contentDocuments.length ? 5 * 60_000 : 90_000);
-      const result = await client.models.generateContent({
+      chained = input.phase !== 'document-reading' && Boolean(input.context);
+      // A chained interaction still reads the retained documents. No inline bytes
+      // does not mean no document work. Recovery shares this one bounded deadline.
+      const timeoutMs = contentDocuments.length || input.context?.documents.length ||
+        selection.thinkingLevel === ThinkingLevel.MEDIUM ? 5 * 60_000 : 90_000;
+      generationSignal = AbortSignal.timeout(timeoutMs);
+      attemptedTrace = { ...attemptedTrace, timeoutMs, attempts: [] };
+      const params = {
         model: selection.model,
-        contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction: BRIEF_SYSTEM_INSTRUCTION,
-          responseMimeType: 'application/json',
-          responseJsonSchema: analysisSchemaForPhase(input.phase),
-          ...(searchRetailer ? { tools: [{ googleSearch: {} }] } : {}),
-          thinkingConfig: { thinkingLevel: selection.thinkingLevel },
-          maxOutputTokens: 12000,
-          abortSignal: generationSignal,
-        },
-      });
-      const usage = result.usageMetadata;
-      attemptedTrace = {
-        ...attemptedTrace,
-        durationMs: Date.now() - startedAt,
-        inputTokens: usage?.promptTokenCount ?? null,
-        outputTokens: usage?.candidatesTokenCount ?? null,
-        thinkingTokens: usage?.thoughtsTokenCount ?? null,
-        totalTokens: usage?.totalTokenCount ?? null,
+        input: interactionInput(parts),
+        stream: false as const,
+        store: true as const,
+        ...(chained ? { previous_interaction_id: input.context!.latestInteractionId } : {}),
+        system_instruction: systemInstructionForPhase(input.phase, catalog.map((field) => field.id)),
+        response_format: { type: 'text' as const, mime_type: 'application/json' as const, schema: analysisSchemaForPhase(input.phase, catalog) },
+        tools: searchRetailer ? [{ type: 'google_search' as const }] : [],
       };
-      let modelAnalysis: unknown;
-      try {
-        modelAnalysis = JSON.parse(result.text || '');
-      } catch (error) {
-        const finishReason = result.candidates?.[0]?.finishReason;
-        console.warn('[brief-analysis] invalid model JSON', {
-          finishReason,
-          outputTokens: result.usageMetadata?.candidatesTokenCount,
-          thinkingTokens: result.usageMetadata?.thoughtsTokenCount,
-          responseChars: result.text?.length ?? 0,
+      let completed: Awaited<ReturnType<typeof finishInteraction>> | undefined;
+      let recoveryFailure: NonNullable<AiRequestTrace['attempts']>[number] | undefined;
+      let rateLimitRetries = 0;
+      for (let attempt = 0; ; attempt++) {
+        generationSignal.throwIfAborted();
+        const thinkingLevel = recoveryFailure && selection.thinkingLevel !== ThinkingLevel.MINIMAL
+          ? ThinkingLevel.LOW : selection.thinkingLevel;
+        const attemptStartedAt = Date.now();
+        failureStage = 'provider';
+        if (jobId) jobs.update(jobId, { phase: input.phase, stage: attempt ? 'retrying' : 'provider' });
+        attemptedTrace.interactionStatus = undefined;
+        const attemptTrace: NonNullable<AiRequestTrace['attempts']>[number] = {
+          thinkingLevel: String(thinkingLevel).toUpperCase() as AiRequestTrace['thinkingLevel'],
+          durationMs: 0, inputTokens: null, outputTokens: null, thinkingTokens: null, totalTokens: null,
+        };
+        attemptedTrace.attempts!.push(attemptTrace);
+        let result;
+        try {
+          result = await interactionClient.create({
+          ...params,
+          ...(recoveryFailure ? {
+            system_instruction: `${params.system_instruction}\n\nThe previous attempt was rejected (${recoveryFailure.validationIssue ?? recoveryFailure.errorCode}). Return a complete, concise JSON object matching the schema and evidence rules. Omit unsupported proposals instead of inventing values.`,
+          } : {}),
+          // max_output_tokens includes thinking, not just JSON. The old 12,000
+          // cap starved the answer. Use the model default and control reasoning
+          // with thinking_level, as recommended by Google.
+          generation_config: { thinking_level: String(thinkingLevel).toLowerCase() },
+        }, {
+          fetchOptions: { signal: generationSignal },
+          timeout: Math.max(1, timeoutMs - (Date.now() - startedAt)),
+          maxRetries: 0,
         });
-        throw error;
+        } catch (error) {
+          const failure = analysisFailure(error, 'provider', generationSignal.aborted, chained);
+          attemptTrace.durationMs = Date.now() - attemptStartedAt;
+          attemptTrace.errorCode = failure.code;
+          attemptTrace.providerStatus = failure.providerStatus;
+          // A failed HTTP call has unknown usage; do not report only the earlier attempt.
+          attemptedTrace.inputTokens = attemptedTrace.outputTokens = attemptedTrace.thinkingTokens = attemptedTrace.totalTokens = null;
+          // Retry explicit rate limits only. Keep the same valid checkpoint and
+          // generation settings; HTTP rejection does not consume JSON recovery.
+          if (failure.code === 'PROVIDER_RATE_LIMIT' && rateLimitRetries < 2 && !generationSignal.aborted) {
+            const waitMs = 2_000 * 2 ** rateLimitRetries + Math.floor(Math.random() * 1_000);
+            rateLimitRetries++;
+            if (jobId) jobs.update(jobId, { phase: input.phase, stage: 'retrying' });
+            console.info('[brief-analysis] retrying rate limit', { id: requestId, retry: rateLimitRetries, waitMs });
+            await wait(waitMs, generationSignal);
+            continue;
+          }
+          throw error;
+        }
+        Object.assign(attemptTrace, interactionDiagnostics(result), {
+          inputTokens: result.usage?.total_input_tokens ?? null,
+          outputTokens: result.usage?.total_output_tokens ?? null,
+          thinkingTokens: result.usage?.total_thought_tokens ?? null,
+          totalTokens: result.usage?.total_tokens ?? null,
+        });
+        attemptTrace.initialInteractionStatus = result.status;
+        attemptTrace.statusChecks = 0;
+        attemptedTrace.interactionStatus = result.status;
+        try {
+          result = await settleInteraction(result, (id) => {
+            attemptTrace.statusChecks!++;
+            return interactionClient.get(id, undefined, {
+              fetchOptions: { signal: generationSignal },
+              timeout: Math.max(1, timeoutMs - (Date.now() - startedAt)),
+              maxRetries: 0,
+            });
+          }, generationSignal, (current) => {
+            Object.assign(attemptTrace, interactionDiagnostics(current), {
+              inputTokens: current.usage?.total_input_tokens ?? null,
+              outputTokens: current.usage?.total_output_tokens ?? null,
+              thinkingTokens: current.usage?.total_thought_tokens ?? null,
+              totalTokens: current.usage?.total_tokens ?? null,
+            });
+            attemptedTrace!.interactionStatus = current.status;
+          });
+        } catch (error) {
+          const failure = analysisFailure(error,
+            error instanceof InteractionOutputError ? 'response' : 'provider', generationSignal.aborted, chained);
+          failureStage = failure.failureStage;
+          attemptTrace.durationMs = Date.now() - attemptStartedAt;
+          attemptTrace.errorCode = failure.code;
+          attemptTrace.providerStatus = failure.providerStatus;
+          attemptedTrace.inputTokens = attemptedTrace.outputTokens = attemptedTrace.thinkingTokens = attemptedTrace.totalTokens = null;
+          throw error;
+        }
+        const usage = result.usage;
+        Object.assign(attemptTrace, {
+          durationMs: Date.now() - attemptStartedAt,
+          ...interactionDiagnostics(result),
+          inputTokens: usage?.total_input_tokens ?? null,
+          outputTokens: usage?.total_output_tokens ?? null,
+          thinkingTokens: usage?.total_thought_tokens ?? null,
+          totalTokens: usage?.total_tokens ?? null,
+        });
+        attemptedTrace.interactionStatus = result.status;
+        // Account for both attempts, rather than hiding failed generation usage.
+        for (const key of ['inputTokens', 'outputTokens', 'thinkingTokens', 'totalTokens'] as const) {
+          const counts = attemptedTrace.attempts!.map((item) => item[key]);
+          attemptedTrace[key] = counts.every((count) => count !== null)
+            ? counts.reduce<number>((sum, count) => sum + count!, 0) : null;
+        }
+        try {
+          failureStage = 'response';
+          if (jobId) jobs.update(jobId, { phase: input.phase, stage: 'validation' });
+          // Separate provider completion/JSON failures from local evidence validation.
+          interactionResponse(result);
+          failureStage = 'validation';
+          completed = await finishInteraction(result, input);
+          break;
+        } catch (error) {
+          const code = error instanceof InteractionOutputError ? error.code : 'INVALID_ANALYSIS';
+          attemptTrace.errorCode = code;
+          // Existing validators emit fixed messages; never echo arbitrary provider data.
+          if (failureStage === 'validation' && error instanceof Error &&
+            /^(Invalid|Incomplete|Missing|Email proposals|Source reading)/.test(error.message))
+            attemptTrace.validationIssue = error.message.slice(0, 160);
+          if (recoveryFailure || code === 'INTERACTION_FAILED')
+            throw new InteractionOutputError(code, 'The model response could not be validated.');
+          recoveryFailure = attemptTrace;
+          console.info('[brief-analysis] recovering output', {
+            id: requestId, phase: input.phase, ...attemptTrace,
+          });
+          // Retry from the last VALID checkpoint, never from the failed interaction.
+        }
       }
-      const parsed = analysisForActivePath(
-        applyDocumentClassifications(
-          validateRetailerWebEvidence(modelAnalysis, result.candidates?.[0]?.groundingMetadata),
-          input.documents,
-          contentDocuments,
-        ),
-        input.values,
-      );
-      if (input.phase === 'follow-up') {
-        parsed.questions = parsed.questions.filter(
-          (question) => modelFields.find((field) => field.id === question.fieldId)?.required,
-        );
-      }
+      if (!completed) throw new InteractionOutputError('INVALID_ANALYSIS', 'No valid analysis.');
       const trace: AiRequestTrace = {
         ...attemptedTrace,
         durationMs: Date.now() - startedAt,
+        outcome: 'completed',
+        httpStatus: 200,
       };
       console.info(
         `[brief-analysis] ${trace.phase} -> ${trace.model} (${trace.thinkingLevel}) ${trace.durationMs}ms`,
       );
-      finish(200, {
-        analysis: parsed,
+      await finish(200, {
+        ...completed,
         trace,
         instructionVersion: BRIEF_INSTRUCTION_VERSION,
       });
     } catch (error) {
-      console.error('[brief-analysis] request failed', error);
-      const trace = attemptedTrace
-        ? { ...attemptedTrace, durationMs: Date.now() - Date.parse(attemptedTrace.createdAt) }
+      const failure = analysisFailure(error, failureStage, generationSignal?.aborted, chained);
+      const { code, providerStatus } = failure;
+      const trace: AiRequestTrace | null = attemptedTrace
+        ? { ...attemptedTrace, durationMs: Date.now() - Date.parse(attemptedTrace.createdAt),
+            outcome: 'failed', errorCode: code, failureStage, providerStatus,
+            origin: failure.origin, httpStatus: failure.httpStatus }
         : null;
-      finish(generationSignal?.aborted ? 504 : 502, {
-        error: generationSignal?.aborted
-          ? 'The Monks AI assistant took too long to respond. Your text and files are still here. Please retry.'
-          : 'The Monks AI assistant could not finish reading this request. Your text and files are still here. Please retry.',
+      console.error('[brief-analysis] request failed', { id: jobId ?? trace?.id, code, failureStage, providerStatus, trace });
+      await finish(failure.httpStatus, {
+        code,
+        error: failure.error,
         ...(trace ? { trace } : {}),
-      });
+      }, failure);
     } finally {
       busy = false;
     }

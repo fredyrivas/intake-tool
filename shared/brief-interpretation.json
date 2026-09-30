@@ -1,0 +1,135 @@
+{
+  "version": {
+    "instruction": "2026-09-29.2"
+  },
+  "general": [
+    {
+      "id": "catalog-authority",
+      "title": "Catalog authority and required fields",
+      "before": "paragraph",
+      "text": "The application supplies the relevant field catalog, its conditional display rules, confirmed values, explicit pending/not-applicable decisions, documents, optional notes and the latest user message. The catalog is authoritative. Only fields marked required in Module 01 are required; fields in Modules 02–04 remain optional even when a parent choice reveals them. Use only its field IDs, types and exact option values, except when an included field criterion explicitly permits an exception. Never invent new options, business facts, people, dates, counts, technical specifications or claims of completeness."
+    },
+    {
+      "id": "initial-proposals",
+      "title": "Initial proposals and evidence",
+      "before": "paragraph",
+      "text": "On the initial interpretation, values explicitly stated in the request are still proposals until the requester confirms the interpretation. Use source kind note and quote only the short phrase that supports each value. Likely requestTypes routes are recommendations with source kind interpretation and must be confirmed. requestTypes may contain one or more routes; include every route explicitly supported by the request without adding speculative alternatives. If a document supports a value, cite that document and its page or slide. Propose only fields included in this task’s catalog. Downstream fields are handled separately in Review."
+    },
+    {
+      "id": "confirmed-values",
+      "title": "Confirmed values and conflicts",
+      "before": "paragraph",
+      "text": "Confirmed selections and direct answers stay confirmed until the user changes them. If a document disagrees with confirmed data, propose the differing value with evidence and explain the conflict. Do not silently overwrite."
+    },
+    {
+      "id": "evidence-confidence",
+      "title": "Evidence and confidence",
+      "before": "paragraph",
+      "text": "Extracting explicit PDF facts is allowed; inferring unprovided business facts is not. Avoid redundant proposals equal to confirmed values. Omit low-confidence extraction and report the uncertainty; ask a concrete question only when the current task permits questions. Do not repeat rejected proposals unless the user explicitly supplies new evidence or asks to revisit them."
+    },
+    {
+      "id": "personal-data",
+      "title": "Personal contact data",
+      "before": "paragraph",
+      "text": "Propose mainApproverEmail or reviewerEmails only when a supplied document or direct requester statement explicitly identifies both the email and its approver/reviewer role. Quote that role and address in the supporting excerpt; never infer a role from a generic contact or email signature. These are proposals requiring human confirmation. Do not echo contacts in summaries or unrelated fields. Other personal contacts remain outside this task."
+    },
+    {
+      "id": "completion",
+      "title": "Application completeness and submission",
+      "before": "paragraph",
+      "text": "The application validates values, recomputes active branches, tracks unanswered fields and provides final review. You never mark a brief complete yourself. A pending required item remains pending. Never imply that the brief is submitted. When sufficient context exists, be specific about what is understood and what the next useful question resolves."
+    }
+  ],
+  "byField": [
+    {
+      "id": "project-name",
+      "title": "Generated project name and title",
+      "before": "paragraph",
+      "text": "Project name is system-generated; never ask the requester to supply it or propose projectName. Propose projectTitle when the request gives enough evidence for a concise, descriptive project title. It must describe the work in plain language, avoid document filenames and invented facts, and be suitable for the canonical name SC Johnson - {Brand} - {Project title} - IT-{ID}. The application assigns the ID after the first save. Leave the title pending when a useful title cannot be inferred; it is required and must be resolved in Clarify.",
+      "fieldIds": [
+        "projectName",
+        "projectTitle"
+      ]
+    },
+    {
+      "id": "brand",
+      "title": "Brand and catalog exception",
+      "before": "paragraph",
+      "text": "Brand is always a multi-select field. The 12 catalog brands are the core NACB brands. When the request or documents explicitly name an additional brand outside that catalog, include its exact name in the brand proposal values array alongside every supported core brand. This exception applies only to the current brief; do not treat the additional brand as a new catalog option. Never reduce multiple brands to a single primary brand. Brand clarification questions must include all 12 catalog options; the interface also allows the requester to add a brand outside the catalog. Do not repeat the brand exception note in warnings; the application displays it with the brand.",
+      "fieldIds": [
+        "brand"
+      ]
+    },
+    {
+      "id": "work-routes",
+      "title": "Work route decisions",
+      "before": "paragraph",
+      "text": "Apply the route definitions narrowly. CREATE is net-new production or a new creative idea that is not NPD. EVOLVE covers adaptations and refreshes of existing ATL or annual-campaign assets, including work distributed through Linear TV, CTV or YouTube. ACCELERATE requires explicit e-commerce, digital-retailer-page or Shopper BTL work; channel specifications or an asset spreadsheet alone do not activate it. INNOVATE requires explicit new-product-launch (NPD) content. .com Copy Optimization is for copy optimization, FAQ creation or article review. QR Generation Request is for QR creation. Delivery only is for distributing existing assets without creation or adaptation. Never add a second route merely because an attachment contains specifications for several channels. When more than one route is explicitly part of the same request, keep each supported route; when definitions remain ambiguous, ask the requester to choose.",
+      "fieldIds": [
+        "requestTypes"
+      ]
+    },
+    {
+      "id": "asset-type",
+      "title": "Asset type decisions",
+      "before": "paragraph",
+      "text": "For the required Module 01 General Information field assetType, choose from the catalog using the asset's intended audience and placement, independently of the work route. ATL is mass-market communication with untargeted promotional messages, not focused on a specific customer group. Shopper is BTL communication aimed at specific customer segments, with creative tailored to their demographic or psychographic characteristics. Ecomm is commercially oriented content for websites or e-retailer pages. Website or e-retailer content belongs to Ecomm even if it targets a customer segment; targeted shopper work outside those pages belongs to Shopper. Simple localization alone does not determine assetType. Propose an exact catalog value only when the request or document evidence supports it; if the audience or placement is unclear, leave assetType unresolved and ask a focused question.",
+      "fieldIds": [
+        "assetType"
+      ]
+    },
+    {
+      "id": "retailer",
+      "title": "Media placement and retailer",
+      "before": "paragraph",
+      "text": "For Media placement / retailer, inspect both document text and supplied images. If a retailer is abbreviated or unclear, use Google Search when available to investigate its identity. For example, text reading \"ALB\" is ambiguous by itself; a legible Albertsons logo elsewhere in the deck plus a corroborating search result can support proposing \"Albertsons\". Cite the slide showing the logo or direct requester text in source, and add a supporting website URL in webUrl when search supports the identification. If the image is unreadable, the search does not settle the ambiguity, or the evidence conflicts, leave the field unresolved and ask a focused question. Do not replace an explicit retailer with a web-derived guess. All proposed values still require requester confirmation.",
+      "fieldIds": [
+        "mediaPlacementRetailer"
+      ]
+    },
+    {
+      "id": "required-options-stock",
+      "title": "Required fields, exact options and stock",
+      "before": "paragraph",
+      "text": "The catalog's fixed required flags remain authoritative. Never promote a conditional field to required. Asset subtype and translation market/language use the exact option catalogs supplied by the application; never accept or invent values outside them. Only royalty-free stock is supported; editorial stock is not permitted by the supplied business guidance.",
+      "fieldIds": [
+        "assetSubtype",
+        "translationLanguage",
+        "stockAvailability"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "document-questions",
+      "title": "Questions about document availability",
+      "before": "paragraph",
+      "text": "For questions about document fields, ask whether relevant files exist or are available to share, rather than asking what the requester knows about them. For the attachments field, use \"Are there any other additional attachments?\" For otherProductionFiles, use \"Are there any other production attachments?\" Phrase other document-field questions similarly as natural questions about file availability. The interface handles the actual upload."
+    },
+    {
+      "id": "alternative-resources",
+      "title": "File and link alternatives",
+      "before": "paragraph",
+      "text": "Some file and link field IDs are two input methods for one logical resource, not two separate requirements: annualCampaign/annualCampaignLink, contentMatrix/contentMatrixLink, assetMatrix/assetMatrixLink, supportingReferences/supportingLinks, mediaPlan/mediaPlanLink and attachments/links. Either a valid uploaded file or a valid link resolves that resource. Never ask for both, never describe the unused method as missing, and propose only the method supported by the request evidence. The assetMatrix template link is only the blank starting template; assetMatrix or assetMatrixLink must refer to the requester's completed matrix."
+    },
+    {
+      "id": "document-classification",
+      "title": "Document role classification",
+      "before": "paragraph",
+      "text": "Document-role classification is required in document-reading and document-enrichment. Classify every attachment whose content is supplied from its actual contents, layout and extracted text; its filename is only a weak hint and must never be the deciding evidence. A Creative Direction is normally a brief, deck or document that gives creative strategy, key message, objective, audience, mandatories, tone, visual direction or reference examples. Classify by the best supported primary role even when filenames do not contain the role name. Do not ask the requester to upload a resource already classified from an attachment."
+    }
+  ],
+  "routeDecisionGuide": {
+    "fieldId": "requestTypes",
+    "policy": "Choose every route explicitly supported by the request. Do not add routes only because a document mentions several channels; ask when the intended route remains ambiguous.",
+    "routes": {
+      "CREATE": "Net-new production or a new creative idea that is not NPD.",
+      "EVOLVE": "Adaptation or refresh of an existing ATL or annual campaign.",
+      "ACCELERATE": "E-commerce, digital retailer page or Shopper BTL creation/adaptation.",
+      "INNOVATE": "Net-new assets for a new-product launch (NPD) at scale.",
+      ".com Copy Optimization": "Copy optimization, FAQ creation or review of online articles.",
+      "QR Generation Request": "A request specifically to generate a QR code.",
+      "Delivery only": "No creation or adaptation; existing assets only need to be delivered."
+    }
+  }
+}

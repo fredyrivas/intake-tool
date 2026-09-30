@@ -16,6 +16,7 @@ test('clarification asks only unanswered required Module 01 fields', () => {
   };
   const ids = clarificationItemsFor(values).map((item) => item.field.id);
   assert.deepEqual(ids, [
+    'projectTitle',
     'brand',
     'region',
     'mainApproverEmail',

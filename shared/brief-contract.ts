@@ -1,3 +1,6 @@
+import briefCatalog from './brief-catalog.json' with { type: 'json' };
+import briefWorkflow from './brief-workflow.json' with { type: 'json' };
+
 export type Values = Record<string, string[]>;
 export type Condition = { field: string; any: string[] };
 export type Field = {
@@ -12,378 +15,24 @@ export type Field = {
     url: string;
   };
 };
-const route = (...any: string[]): Condition => ({ field: 'requestTypes', any });
-const delivery = (...any: string[]): Condition => ({ field: 'deliveryTypes', any });
-const need = (field: string, ...any: string[]): Condition => ({ field, any });
-const field = (
-  id: string,
-  label: string,
-  type: Field['type'] = 'text',
-  when: Condition[] = [],
-  required = false,
-  options?: string[],
-  template?: Field['template'],
-): Field => ({
-  id,
-  label,
-  type,
-  when,
-  required,
-  ...(options ? { options } : {}),
-  ...(template ? { template } : {}),
-});
-
-// Only Module 01 fields in the deconstructed Workspace flow are required.
-// Work route is confirmed separately in scope to determine the active form path.
-export const fields: Field[] = [
-  field('projectName', 'Project name', 'text', [], true),
-  field('projectTitle', 'Project title'),
-  field('brand', 'Brand', 'multi', [], true, [
-    'Glade',
-    'Drano',
-    'Scrubbing Bubbles',
-    'Ziploc',
-    'Windex',
-    'Pledge',
-    'OFF!',
-    'Raid',
-    'STEM',
-    'Thermacell',
-    'Baygon',
-    'Scale',
-  ]),
-  field('region', 'Region', 'multi', [], true, [
-    'USA',
-    'Canada',
-    'Puerto Rico',
-    'Dominican Republic',
-    'Other',
-  ]),
-  field('mainApproverEmail', 'Main approver (email)', 'email', [], true),
-  field('reviewerEmails', 'Reviewers / project contributors (email)', 'emails'),
-  field('assetType', 'Asset type', 'select', [], true, ['Ecomm', 'ATL', 'Shopper']),
-  field('expectedDeliveryDate', 'Expected delivery date', 'date', [], true),
-  field('mediaPlacementRetailer', 'Media placement / retailer', 'text', [], true),
-  field('totalAssets', 'Total number of assets', 'number', [], true),
-  field('creativeDirection', 'Creative Direction (template)', 'document', [], true, undefined, {
-    label: 'Creative Direction template',
-    url: 'https://docs.google.com/presentation/d/1rN2L-kF1H-qEuBvmree7RadybgNM2EvT/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true',
-  }),
-  field('requestTypes', 'Type of Content Brief', 'multi', [], false, [
-    'CREATE',
-    'EVOLVE',
-    'ACCELERATE',
-    'INNOVATE',
-    '.com Copy Optimization',
-    'QR Generation Request',
-    'Delivery only',
-  ]),
-  field('createDeliverables', 'CREATE deliverables', 'multi', [route('CREATE')], false, [
-    'National campaign films / TVC',
-    'National campaign films / CTV',
-    'National campaign films / OLV',
-    'National campaign films / Social',
-    'Evergreen content / Sponsored videos',
-    'Evergreen content / OLV',
-    'Evergreen content / Social',
-    'Evergreen content / Statics',
-    'Big idea production',
-  ]),
-  ...[
-    ['businessContext', 'Business context / objective'],
-    ['consumerInsights', 'Consumer insights driving the work'],
-    ['audience', 'Audience'],
-    ['askGoal', 'The ask & goal'],
-    ['communicationObjective', 'Communication objective'],
-    ['consumerTakeaway', 'Consumers takeaway (emotional / functional)'],
-    ['mandatories', 'Mandatories'],
-    ['outOfScope', 'Out of scope'],
-    ['research', 'Research and insights'],
-    ['creativeNotes', 'Additional notes or context'],
-  ].map(([id, label]) => field(id, label, 'text', [route('CREATE')])),
-  field('creativeReferences', 'Attachments / visual references', 'document', [route('CREATE')]),
-  field('evolveDeliverables', 'EVOLVE deliverables', 'multi', [route('EVOLVE')], false, [
-    'Social',
-    'Static',
-    'Promotional',
-    'HTVs',
-    'Adapts / refreshes',
-  ]),
-  field('annualCampaign', 'Annual campaign / reference deck (file)', 'document', [route('EVOLVE')]),
-  field('annualCampaignLink', 'Annual campaign / reference deck (link)', 'link', [route('EVOLVE')]),
-  field('contentMatrix', 'Content matrix (file)', 'document', [route('EVOLVE')]),
-  field('contentMatrixLink', 'Content matrix (link)', 'link', [route('EVOLVE')]),
-  field(
-    'assetMatrix',
-    'Completed asset matrix',
-    'document',
-    [route('EVOLVE', 'ACCELERATE', 'INNOVATE')],
-    false,
-    undefined,
-    {
-      label: 'Asset Matrix',
-      url: 'https://docs.google.com/spreadsheets/d/1hi-6wABS63b-KmD4ZJE1OyMOW_FC98JN/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true',
-    },
+// Expand module defaults into the existing runtime field contract.
+export const fields: Field[] = briefCatalog.modules.flatMap((module) =>
+  module.fields.map((field) => ({
+    id: field.id,
+    label: field.label,
+    type: field.type,
+    when: 'when' in field ? field.when : [],
+    required: 'required' in field ? field.required : module.requiredDefault,
+    ...('options' in field ? { options: field.options } : {}),
+    ...('template' in field ? { template: field.template } : {}),
+  })),
+) as Field[];
+export const moduleIdByFieldId = new Map(
+  briefCatalog.modules.flatMap((module) =>
+    module.fields.map((field) => [field.id, module.id] as const),
   ),
-  field('assetMatrixLink', 'Completed asset matrix (link)', 'link', [
-    route('EVOLVE', 'ACCELERATE', 'INNOVATE'),
-  ]),
-  field('workDescription', 'Work instructions', 'text', [
-    route('EVOLVE', 'ACCELERATE', 'INNOVATE'),
-  ]),
-  field('supportingReferences', 'Creative references / supporting files', 'document', [
-    route('EVOLVE', 'ACCELERATE', 'INNOVATE'),
-  ]),
-  field('supportingLinks', 'Creative references / supporting links', 'link', [
-    route('EVOLVE', 'ACCELERATE', 'INNOVATE'),
-  ]),
-  field('partnershipContext', 'Partnership context (if applicable)', 'text', [
-    route('EVOLVE', 'ACCELERATE'),
-  ]),
-  field('evolveNeeds', 'EVOLVE production needs', 'multi', [route('EVOLVE')], false, [
-    'Specific music',
-    'Stock materials',
-    'VO recording',
-    'Translation',
-    '__none__',
-  ]),
-  field('musicDetails', 'Music details', 'text', [
-    route('EVOLVE'),
-    need('evolveNeeds', 'Specific music'),
-  ]),
-  field('musicReferences', 'Music reference files', 'document', [
-    route('EVOLVE'),
-    need('evolveNeeds', 'Specific music'),
-  ]),
-  ...[
-    ['voLanguage', 'Voice-over market / language'],
-    ['castingBrief', 'Casting brief (talents, gender, tone, age)'],
-    ['buyoutDetails', 'Buyout details (duration, countries, media, usage)'],
-  ].map(([id, label]) =>
-    field(id, label, 'text', [route('EVOLVE'), need('evolveNeeds', 'VO recording')]),
-  ),
-  field(
-    'accelerateDeliverables',
-    'ACCELERATE deliverables',
-    'multi',
-    [route('ACCELERATE')],
-    false,
-    [
-      'eComm digital retailer pages assets',
-      'eComm Video',
-      'Shopper / Media and printed non-displays',
-      'Shopper / 3D display',
-    ],
-  ),
-  field(
-    'assetSubtype',
-    'Asset subtype',
-    'multi',
-    [route('ACCELERATE'), need('accelerateDeliverables', 'eComm digital retailer pages assets')],
-    false,
-    [
-      'Base+ tiles',
-      'Beauty Shots',
-      'Brand store assets',
-      'Collection video',
-      'Mobile hero images',
-      'Enhanced content',
-      'Marketing copy',
-    ],
-  ),
-  field('vizitLink', 'BOS VIZIT folder link (if applicable)', 'link', [
-    route('ACCELERATE'),
-    need('accelerateDeliverables', 'eComm digital retailer pages assets'),
-  ]),
-  field('videoSpecs', 'Video work instructions and specifications', 'text', [
-    route('ACCELERATE'),
-    need('accelerateDeliverables', 'eComm Video'),
-  ]),
-  field('accelerateNeeds', 'ACCELERATE production needs', 'multi', [route('ACCELERATE')], false, [
-    'Stock materials',
-    'Translation',
-    '__none__',
-  ]),
-  field('stockAvailability', 'Stock availability', 'select', [], false, [
-    'I have stock materials',
-    'Help me find stock materials',
-  ]),
-  field('stockMaterials', 'Stock materials (file)', 'document', [
-    route('EVOLVE', 'ACCELERATE'),
-    need('stockAvailability', 'I have stock materials'),
-  ]),
-  field('stockMaterialsLink', 'Stock materials (link)', 'link', [
-    route('EVOLVE', 'ACCELERATE'),
-    need('stockAvailability', 'I have stock materials'),
-  ]),
-  field('stockDirection', 'Stock references / direction', 'document', [
-    route('EVOLVE', 'ACCELERATE'),
-    need('stockAvailability', 'Help me find stock materials'),
-  ]),
-  field('translationLanguage', 'Translation market / language', 'multi', [], false, [
-    'US_EN',
-    'US_ES',
-    'CA_EN',
-    'CA_FR',
-    'PR_ES',
-    'PR_EN',
-    'DO_ES',
-    'Other',
-  ]),
-  field('translationInstructions', 'Translation instructions'),
-  field('translationCopy', 'Copy document for translation', 'document'),
-  field('otherProductionNotes', 'Other production notes', 'text', [route('EVOLVE', 'ACCELERATE')]),
-  field('otherProductionFiles', 'Other production attachments', 'document', [route('EVOLVE')]),
-  field('adaptInstructions', 'Adapt instructions', 'document', [route('ACCELERATE')]),
-  field(
-    'marketingCopy',
-    'Marketing copy instructions (if applicable)',
-    'document',
-    [route('ACCELERATE')],
-    false,
-    undefined,
-    {
-      label: 'Marketing Copy Checklist',
-      url: 'https://docs.google.com/spreadsheets/d/1JbjhagCpaqqC6Y5h62auDbciqLqzrg7u/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true',
-    },
-  ),
-  field('innovateDeliverables', 'INNOVATE deliverables', 'multi', [route('INNOVATE')], false, [
-    'KV',
-    'PDP assets',
-    'B+ tiles',
-    'Brand page content',
-    'In-store display',
-    'HTVs / sponsored brand videos',
-    'Social post',
-  ]),
-  field('copyServices', 'Copy services', 'multi', [route('.com Copy Optimization')], false, [
-    'Copy Optimization',
-    'FAQ creation',
-    'New Article Review',
-  ]),
-  field('knowledgeBase', 'Tone of voice, product information and legal guidelines', 'document', [
-    route('.com Copy Optimization'),
-  ]),
-  field('copyLinks', 'Articles to optimize', 'link', [
-    route('.com Copy Optimization'),
-    need('copyServices', 'Copy Optimization'),
-  ]),
-  field('faqLinks', 'Articles for FAQ creation', 'link', [
-    route('.com Copy Optimization'),
-    need('copyServices', 'FAQ creation'),
-  ]),
-  field('newArticles', 'New articles for review', 'document', [
-    route('.com Copy Optimization'),
-    need('copyServices', 'New Article Review'),
-  ]),
-  field(
-    'qrTemplate',
-    'Completed QR Template form',
-    'document',
-    [route('QR Generation Request')],
-    false,
-    undefined,
-    {
-      label: 'QR Code Request Form',
-      url: 'https://docs.google.com/document/d/1zOvViSpfrOCo3hvYb0ar4IttLg2WnipP/edit?usp=drive_link&ouid=115015085389003782788&rtpof=true&sd=true',
-    },
-  ),
-  field('deliveryTypes', 'Delivery methods', 'multi', [], false, [
-    'Directly to vendor / 3rd party',
-    'Directly to media agency',
-    'Directly to SCJ marketer',
-    'Extreme Reach (TVC)',
-    'Social posting',
-    'Digital Shopper',
-    'Ecomm (Salsify)',
-    'Other delivery need',
-  ]),
-  field('vendorDetails', 'Vendor delivery instructions & contact details', 'text', [
-    delivery('Directly to vendor / 3rd party'),
-  ]),
-  field('vendorInstructions', 'Vendor delivery instructions file', 'document', [
-    delivery('Directly to vendor / 3rd party'),
-  ]),
-  field('agencyDetails', 'Media agency delivery instructions & contact details', 'text', [
-    delivery('Directly to media agency'),
-  ]),
-  field('agencyInstructions', 'Media agency delivery instructions file', 'document', [
-    delivery('Directly to media agency'),
-  ]),
-  field('otherDeliveryDetails', 'Other delivery instructions & contact details', 'text', [
-    delivery('Other delivery need'),
-  ]),
-  field('otherDeliveryInstructions', 'Other delivery instructions file', 'document', [
-    delivery('Other delivery need'),
-  ]),
-  field('firstAirDate', 'First air date', 'date', [delivery('Extreme Reach (TVC)')]),
-  field('endAirDate', 'End air date', 'date', [delivery('Extreme Reach (TVC)')]),
-  field('mediaPlan', 'Media plan', 'document', [delivery('Extreme Reach (TVC)')]),
-  field('mediaPlanLink', 'Media plan link', 'link', [delivery('Extreme Reach (TVC)')]),
-  field('preClearance', 'Pre-clearance requirement', 'text', [delivery('Extreme Reach (TVC)')]),
-  field('clearance', 'Clearance requirement', 'text', [delivery('Extreme Reach (TVC)')]),
-  field('localClearance', 'Local-clearance information', 'document', [
-    delivery('Extreme Reach (TVC)'),
-  ]),
-  field('socialDestinations', 'Social destinations', 'multi', [delivery('Social posting')], false, [
-    'YouTube',
-    'Social',
-    'Other',
-  ]),
-  field('youtubeInstructions', 'YouTube titles, descriptions and posting dates per asset', 'text', [
-    delivery('Social posting'),
-    need('socialDestinations', 'YouTube'),
-  ]),
-  field('youtubeFiles', 'YouTube instructions file', 'document', [
-    delivery('Social posting'),
-    need('socialDestinations', 'YouTube'),
-  ]),
-  field('socialInstructions', 'Social copy and posting dates per asset', 'text', [
-    delivery('Social posting'),
-    need('socialDestinations', 'Social'),
-  ]),
-  field('socialFiles', 'Social instructions file', 'document', [
-    delivery('Social posting'),
-    need('socialDestinations', 'Social'),
-  ]),
-  field('otherSocialInstructions', 'Other social destination instructions per asset', 'text', [
-    delivery('Social posting'),
-    need('socialDestinations', 'Other'),
-  ]),
-  field('shopperCopy', 'Digital Shopper copy instructions per asset', 'text', [
-    delivery('Digital Shopper'),
-  ]),
-  field('ecommerceTemplate', 'E-commerce delivery-details template', 'document', [
-    delivery('Ecomm (Salsify)'),
-  ]),
-  field(
-    'ecommerceMode',
-    'Should assets append or replace existing assets?',
-    'select',
-    [delivery('Ecomm (Salsify)')],
-    false,
-    ['Append', 'Replace'],
-  ),
-  field('ecommerceOrder', 'Should assets appear in a specific order?', 'text', [
-    delivery('Ecomm (Salsify)'),
-  ]),
-  field(
-    'ecommerceProperties',
-    'E-commerce properties',
-    'multi',
-    [delivery('Ecomm (Salsify)')],
-    false,
-    ['Base', 'Base+', 'Enhanced content', 'eRetailer specific'],
-  ),
-  field('ecommerceInstructions', 'E-commerce delivery instructions (if applicable)', 'text', [
-    delivery('Ecomm (Salsify)'),
-  ]),
-  field('ecommerceFiles', 'E-commerce delivery files', 'document', [delivery('Ecomm (Salsify)')]),
-  field('needsOpenFiles', 'Editable files', 'select', [], false, ['Yes', 'No']),
-  field('notes', 'Additional notes'),
-  field('attachments', 'Additional attachments', 'document'),
-  field('links', 'Additional links', 'link'),
-];
+);
+export const automaticMessages = briefWorkflow.automaticMessages;
 
 export const coreBrands = fields.find((field) => field.id === 'brand')!.options!;
 
@@ -396,32 +45,25 @@ export function brandExceptionNotes(brands: string[] = []): string[] {
     );
 }
 
-// Contact details are collected directly by the application and are never model context.
-export const privateFieldIds = new Set(['mainApproverEmail', 'reviewerEmails']);
+// Only fields explicitly excluded by catalog policy are omitted from model context.
+export const privateFieldIds = new Set<string>(briefCatalog.sharedPolicies.privateFieldIds);
 export const modelFields = fields.filter((field) => !privateFieldIds.has(field.id));
+export const documentRoles = briefCatalog.sharedPolicies.documentRoles;
 
 export function activeFields(values: Values): Field[] {
-  const hasNeed = (value: string) =>
-    (values.requestTypes?.includes('EVOLVE') && values.evolveNeeds?.includes(value)) ||
-    (values.requestTypes?.includes('ACCELERATE') && values.accelerateNeeds?.includes(value));
-  return fields.filter((f) => {
-    if (f.id === 'stockAvailability') return hasNeed('Stock materials');
-    if (f.id.startsWith('translation')) return hasNeed('Translation');
-    return f.when.every((condition) =>
-      condition.any.some((v) => values[condition.field]?.includes(v)),
+  const matches = (conditions: Condition[]) =>
+    conditions.every((condition) =>
+      condition.any.some((value) => values[condition.field]?.includes(value)),
     );
+  return fields.filter((field) => {
+    const special = briefCatalog.sharedPolicies.specialActivation.find((rule) =>
+      rule.fieldIds.includes(field.id),
+    );
+    return matches(field.when) && (!special || special.whenAny.some((group) => matches(group)));
   });
 }
 
-export const alternativeFieldGroups = [
-  ['annualCampaign', 'annualCampaignLink'],
-  ['contentMatrix', 'contentMatrixLink'],
-  ['assetMatrix', 'assetMatrixLink'],
-  ['supportingReferences', 'supportingLinks'],
-  ['stockMaterials', 'stockMaterialsLink'],
-  ['mediaPlan', 'mediaPlanLink'],
-  ['attachments', 'links'],
-] as const;
+export const alternativeFieldGroups = briefCatalog.sharedPolicies.alternativeFieldGroups as [string, string][];
 
 export function fieldIsRequired(field: Field, _conditionalRequiredFieldIds: string[] = []) {
   void _conditionalRequiredFieldIds;
@@ -522,18 +164,49 @@ export type Analysis = {
   conditionalRequiredFieldIds: string[];
   warnings: string[];
 };
-export type AnalysisPhase = 'scope' | 'document-enrichment' | 'follow-up' | 'final-review';
+export type AnalysisPhase = 'document-reading' | 'scope' | 'document-enrichment' | 'follow-up' | 'final-review';
+export type AnalysisProgress = {
+  phase: AnalysisPhase;
+  stage: 'preparation' | 'submission' | 'provider' | 'retrying' | 'validation' | 'checkpoint';
+};
 export type AiRequestTrace = {
   id: string;
   phase: AnalysisPhase;
   model: string;
-  thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
+  thinkingLevel: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH' | 'UNAVAILABLE';
   reason: string;
   durationMs: number;
+  totalDurationMs?: number;
   inputTokens: number | null;
   outputTokens: number | null;
   thinkingTokens: number | null;
   totalTokens: number | null;
+  outcome?: 'completed' | 'failed';
+  errorCode?: string;
+  failureStage?: 'request' | 'preparation' | 'provider' | 'response' | 'validation' | 'network' | 'polling' | 'checkpoint';
+  origin?: 'browser' | 'server' | 'gemini';
+  httpStatus?: number;
+  configurationVersion?: string;
+  providerStatus?: number;
+  interactionStatus?: string;
+  timeoutMs?: number;
+  attempts?: {
+    thinkingLevel: AiRequestTrace['thinkingLevel'];
+    durationMs: number;
+    interactionStatus?: string;
+    interactionId?: string;
+    initialInteractionStatus?: string;
+    statusChecks?: number;
+    stepTypes?: string[];
+    providerStatus?: number;
+    responseCharacters?: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    thinkingTokens: number | null;
+    totalTokens: number | null;
+    errorCode?: string;
+    validationIssue?: string;
+  }[];
   requestSummary?: {
     catalogFields: number;
     confirmedFields: number;
@@ -669,14 +342,18 @@ export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis
       p.source.page < 0
     )
       throw new Error('Invalid proposed field or source.');
+    if (['email', 'emails'].includes(f.type) && (p.source.kind === 'interpretation' || !p.values.every((value) => p.source.excerpt.toLowerCase().includes(value.toLowerCase()))))
+      throw new Error('Email proposals require explicit role-labeled evidence.');
     if (
       p.source.kind === 'document' &&
       (!documents.some((d) => d.id === p.source.documentId) ||
         !p.source.excerpt.trim() ||
-        (documents.find((d) => d.id === p.source.documentId)?.mimeType === 'application/pdf' &&
+        (['application/pdf', presentationMimeType].includes(documents.find((d) => d.id === p.source.documentId)?.mimeType || '') &&
           p.source.page < 1))
     )
       throw new Error('Missing document evidence.');
+    if (p.source.kind !== 'document' && (p.source.documentId !== '' || p.source.page !== 0))
+      throw new Error('Invalid non-document evidence.');
   }
   if (
     !a.questions.every((q) => {
@@ -687,7 +364,7 @@ export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis
         q.prompt.length <= 1000 &&
         (q.context === undefined || (typeof q.context === 'string' && q.context.length <= 300)) &&
         Array.isArray(q.options) &&
-        q.options.length >= 2 &&
+        (q.options.length === 0 || q.options.length >= 2) &&
         q.options.length <= 40 &&
         q.options.every(
           (option) =>

@@ -1,6 +1,6 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { ArrowRight, Sparkles } from 'lucide-react';
-import { Button } from '@monksflow/monks-ui';
+import { Button, Textarea } from '@monksflow/monks-ui';
 import { capitalizeToolNames, fieldIsRequired, validValue, type Analysis, type Attachment, type Values } from '../shared/brief-contract';
 import type { ClarificationItem } from './brief-sections';
 import { FieldInput } from './brief-form';
@@ -49,6 +49,7 @@ export function ClarificationTurn({
   disabled,
   onFilesReadingChange,
   onValueChange,
+  onInterpret,
   onAdvance,
   onDefer,
   onNotApplicable,
@@ -62,10 +63,12 @@ export function ClarificationTurn({
   disabled: boolean;
   onFilesReadingChange: (reading: boolean) => void;
   onValueChange: (fieldId: string, value: string[]) => void;
+  onInterpret: (message: string) => Promise<void>;
   onAdvance: (acceptSuggestion: boolean) => void;
   onDefer: () => void;
   onNotApplicable: () => void;
 }) {
+  const [writtenAnswer, setWrittenAnswer] = useState('');
   const { field, companion } = item;
   const candidates = companion ? [field, companion] : [field];
   const required = fieldIsRequired(field, conditionalRequiredFieldIds);
@@ -265,6 +268,17 @@ export function ClarificationTurn({
             )}
           </>
         )}
+        {field.type !== 'document' ? (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-black/60">Describe your answer instead</summary>
+            <label className="mt-3 block" htmlFor={`interpret-${field.id}`}>Your answer</label>
+            <Textarea id={`interpret-${field.id}`} value={writtenAnswer} disabled={disabled} maxLength={6000}
+              onChange={(event) => setWrittenAnswer(event.target.value)} className="mt-2" />
+            <Button type="button" variant="outline" size="sm" className="mt-2"
+              disabled={disabled || !writtenAnswer.trim()}
+              onClick={() => void onInterpret(`${field.label}: ${writtenAnswer.trim()}`)}>Interpret answer</Button>
+          </details>
+        ) : null}
         {invalid ? (
           <p className="mt-2 text-xs text-amber-700">Please check this answer's format.</p>
         ) : null}

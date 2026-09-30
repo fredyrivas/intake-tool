@@ -24,7 +24,8 @@ import {
 } from 'lucide-react';
 import { Button, Card, CardContent, Input, Label, Textarea } from '@monksflow/monks-ui';
 import { AdvancedAiLog } from './advanced-ai-log';
-import { requestBriefAnalysis } from './request-brief-analysis';
+import { runBriefAnalysis } from './brief-analysis-flow';
+import { restoreAnalysisContext, type AnalysisContext } from '../shared/brief-context';
 import { BriefForm, FieldInput, type Disposition } from './brief-form';
 import { clarificationItemResolved, clarificationItemsFor } from './brief-sections';
 import { ClarificationTurn } from './clarification-turn';
@@ -40,6 +41,7 @@ import jiraFavicon from './assets/jira.png';
 import {
   activeFields,
   alternativeFieldGroups,
+  automaticMessages,
   brandExceptionNotes,
   cleanValues,
   fieldIsRequired,
@@ -51,12 +53,29 @@ import {
   type AiRequestTrace,
   type Analysis,
   type AnalysisPhase,
+  type AnalysisProgress,
   type Attachment,
   type Field,
   type Proposal,
   type Source,
   type Values,
 } from '../shared/brief-contract';
+
+const analysisPhaseLabels: Record<AnalysisPhase, string> = {
+  'document-reading': 'Reading your sources',
+  scope: 'Preparing your scope',
+  'document-enrichment': 'Reading new documents',
+  'follow-up': 'Clarifying your brief',
+  'final-review': 'Reviewing your brief',
+};
+const analysisStageLabels: Record<AnalysisProgress['stage'], string> = {
+  preparation: 'Preparing your information for analysis.',
+  submission: 'Sending your request for analysis.',
+  provider: 'Analyzing your information. This may take a moment.',
+  retrying: 'Rechecking the analysis to complete the response.',
+  validation: 'Checking the response and its supporting evidence.',
+  checkpoint: 'Saving the analysis so you can continue.',
+};
 
 const examples = [
   'I need to adapt and refresh six Ziploc Holiday FY27 ATL assets for the US across Linear TV, CTV and YouTube. I’ve attached the creative direction and specifications. Please deliver by September 17, share with the Nova team and SCJ, deliver through Extreme Reach for the October 5 to December 31 flight, and upload the final files to BOS. Open files aren’t needed.',
@@ -84,7 +103,8 @@ function stageFromPath(pathname: string): Stage | null {
 }
 
 type SavedBriefDraft = {
-  version: 3;
+  version: 4;
+  context: AnalysisContext | null;
   stage: Stage;
   intent: string;
   analysis: Analysis | null;
@@ -204,7 +224,8 @@ function clearBrowserDraft() {
 
 function emptyDraft(documents: Attachment[]): SavedBriefDraft & { documents: Attachment[] } {
   return {
-    version: 3,
+    version: 4,
+    context: null,
     stage: 'intent',
     intent: '',
     documents,
@@ -256,7 +277,7 @@ function readSavedDraft(documents: Attachment[]): SavedBriefDraft & { documents:
         localStorage.getItem(legacyDraftStorageKey) ||
         'null',
     );
-    if (!value || typeof value !== 'object' || ![2, 3].includes(value.version)) return empty;
+    if (!value || typeof value !== 'object' || ![2, 3, 4].includes(value.version)) return empty;
     let analysis: Analysis | null = null;
     try {
       analysis = value.analysis ? parseAnalysis(value.analysis, documents) : null;
@@ -283,6 +304,7 @@ function readSavedDraft(documents: Attachment[]): SavedBriefDraft & { documents:
       stage: stage === 'intent' || analysis ? (stage === 'brief' ? 'clarify' : stage) : 'intent',
       intent: typeof value.intent === 'string' ? value.intent.slice(0, 6000) : '',
       analysis,
+      context: restoreAnalysisContext(value.context, documents),
       proposals: parseSavedProposals(value.proposals, 'Saved scope'),
       values,
       sources: value.sources && typeof value.sources === 'object' ? value.sources : {},
@@ -813,6 +835,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     if (requestedStage && stageIsAvailable(requestedStage, savedDraft)) return requestedStage;
     return stageIsAvailable(savedDraft.stage, savedDraft) ? savedDraft.stage : 'intent';
   });
+  const [context, setContext] = useState<AnalysisContext | null>(savedDraft.context);
+  const contextRef = useRef(context);
   const [intent, setIntent] = useState(savedDraft.intent);
   const [documents, setDocuments] = useState<Attachment[]>(savedDraft.documents);
   const [filesReading, setFilesReading] = useState(false);
@@ -835,6 +859,9 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   const [traces, setTraces] = useState<AiRequestTrace[]>(savedDraft.traces);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
+  const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(null);
+  const [analysisElapsedSeconds, setAnalysisElapsedSeconds] = useState(0);
   const [error, setError] = useState('');
   const [storageWarning, setStorageWarning] = useState('');
   const [currentBriefId, setCurrentBriefId] = useState<string | null>(initialBriefId);
@@ -864,7 +891,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   const suggestionList = useMemo(() => Object.values(suggested), [suggested]);
   const currentDraft = useMemo<SavedBriefDraft>(
     () => ({
-      version: 3,
+      version: 4,
+      context,
       stage: stage === 'briefs' ? 'intent' : stage,
       intent,
       analysis,
@@ -878,6 +906,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       traces,
     }),
     [
+      context,
       analysis,
       analyzedDocumentIds,
       clarificationHistory,
@@ -925,6 +954,14 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   }
 
   useEffect(() => {
+    if (analysisStartedAt === null) return;
+    const timer = window.setInterval(() => {
+      setAnalysisElapsedSeconds(Math.floor((performance.now() - analysisStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [analysisStartedAt]);
+
+  useEffect(() => {
     const nextPath = `${stagePaths[stage]}${currentBriefId && stage !== 'briefs' ? `?brief=${currentBriefId}` : ''}`;
     if (`${window.location.pathname}${window.location.search}` !== nextPath) {
       window.history.replaceState(null, '', nextPath);
@@ -958,6 +995,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     origin: 'creator' | 'library' = 'library',
   ) {
     const draft = brief.draft;
+    contextRef.current = restoreAnalysisContext(draft.context, brief.documents || []);
+    setContext(contextRef.current);
     setIntent(draft.intent || '');
     setDocuments(brief.documents || []);
     setAnalysis(draft.analysis || null);
@@ -1171,6 +1210,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   useEffect(() => {
     if (
       !currentBriefId ||
+      busy ||
       stage === 'briefs' ||
       loadingBrief ||
       (stage === 'final' && reviewOrigin === 'creator')
@@ -1187,7 +1227,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     return () => window.clearTimeout(timer);
     // saveBrief is intentionally represented by the state that forms its payload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBriefId, currentDraft, documents, loadingBrief, reviewOrigin, stage]);
+  }, [busy, currentBriefId, currentDraft, documents, loadingBrief, reviewOrigin, stage]);
 
   async function deleteBrief(brief: BriefSummary) {
     if (
@@ -1234,47 +1274,61 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
 
   function recordTrace(trace: AiRequestTrace) {
     console.info('[Brief AI request]', trace);
-    setTraces((current) => [...current.slice(-19), trace]);
+    setTraces((current) => [...current.filter((item) => item.id !== trace.id).slice(-19), trace]);
   }
 
   async function requestAnalysis(
-    phase: AnalysisPhase,
+    phase: Exclude<AnalysisPhase, 'document-reading'>,
     currentValues: Values,
     message: string,
     currentDocuments = documents,
     currentDispositions = dispositions,
   ) {
-    const requestDocuments = currentDocuments.map((document) => ({
-      ...document,
-      data:
-        phase === 'scope' ||
-        (phase === 'document-enrichment' && !analyzedDocumentIds.has(document.id))
-          ? document.data
-          : '',
-    }));
-    const { response, result } = await requestBriefAnalysis(
-      JSON.stringify({
-        phase,
-        values: currentValues,
-        documents: requestDocuments,
-        notes: '',
-        message,
+    const requestTraces = [...traces];
+    setAnalysisStartedAt(performance.now());
+    setAnalysisElapsedSeconds(0);
+    try {
+      return await runBriefAnalysis({
+        phase, intent, message, documents: currentDocuments,
+        values: Object.fromEntries(Object.entries(currentValues).filter(([id]) => !suggested[id])),
         dispositions: currentDispositions,
-        rejected: [],
-        conversation: [],
-        pendingProposals:
-          phase === 'document-enrichment'
-            ? suggestionList.map(({ fieldId, values: proposalValue }) => ({
-                fieldId,
-                values: proposalValue,
-              }))
-            : [],
-      }),
-    );
-    if (result.trace) recordTrace(result.trace as AiRequestTrace);
-    if (!response.ok) throw new Error(result.error || 'We could not analyze this brief.');
-    const next = parseAnalysis(result.analysis, currentDocuments);
-    return next;
+        pendingProposals: suggestionList.map(({ fieldId, values: proposed }) => ({ fieldId, values: proposed })),
+        context: contextRef.current,
+      }, {
+        onProgress: (progress) => {
+          if (progress.stage === 'submission') {
+            setAnalysisStartedAt(performance.now());
+            setAnalysisElapsedSeconds(0);
+          }
+          setAnalysisProgress(progress);
+        },
+        onTrace: (trace) => {
+          const index = requestTraces.findIndex((item) => item.id === trace.id);
+          if (index < 0) requestTraces.push(trace);
+          else requestTraces[index] = trace;
+          recordTrace(trace);
+        },
+        checkpoint: async (nextContext) => {
+          const draft = { ...currentDraft, context: nextContext, traces: requestTraces.slice(-20) };
+          // A completed reading must survive a failed second call or a reload.
+          if (currentBriefId) {
+            const response = await fetch(`/api/briefs/${currentBriefId}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ draft, documents: currentDocuments }),
+            });
+            if (!response.ok) throw new Error('Could not save the analysis context. Please retry.');
+          } else {
+            await writeDraftDocuments(currentDocuments);
+            localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+          }
+          contextRef.current = nextContext;
+          setContext(nextContext);
+        },
+      });
+    } finally {
+      setAnalysisProgress(null);
+      setAnalysisStartedAt(null);
+    }
   }
 
   function mergeSuggestions(nextAnalysis: Analysis, baseValues = values) {
@@ -1350,35 +1404,17 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     }
   }
 
-  async function confirmScope() {
+  function confirmScope() {
     if (!hasRouteProposal || requestLock.current || filesReading) return;
     const confirmed = withGeneratedProjectName(cleanValues(proposalValues, documents));
-    requestLock.current = true;
-    setBusy(true);
     setError('');
     setValues(confirmed);
-    setSources(
-      Object.fromEntries(proposals.map((proposal) => [proposal.fieldId, proposal.source])),
-    );
+    setSources(Object.fromEntries(proposals.map((proposal) => [proposal.fieldId, proposal.source])));
     setSuggested({});
     setClarificationHistory([]);
     setClarificationFocusId(null);
     setClarificationBackId(null);
-    try {
-      const next = await requestAnalysis(
-        'follow-up',
-        confirmed,
-        'The requester confirmed this scope. Ask only for missing required Module 01 fields. Give each question brief context grounded in the confirmed request. Optional fields remain for review.',
-      );
-      setAnalysis(next);
-    } catch (caught) {
-      setAnalysis((current) => (current ? { ...current, questions: [] } : current));
-      setError(caught instanceof Error ? caught.message : 'Could not prepare the next questions.');
-    } finally {
-      setBusy(false);
-      requestLock.current = false;
-      navigateToStage('clarify');
-    }
+    navigateToStage('clarify');
   }
 
   const updateProposal = (fieldId: string, nextValues: string[]) => {
@@ -1391,7 +1427,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
           kind: 'note',
           documentId: '',
           page: 0,
-          excerpt: 'Adjusted and confirmed by the requester.',
+          excerpt: `Adjusted by the requester — ${fieldById.get(fieldId)?.label}: ${nextValues.join(', ')}`,
         },
       };
       const updated = existing
@@ -1468,6 +1504,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       delete next[fieldId];
       return next;
     });
+    setValues((current) => withGeneratedProjectName(pruneInactive({ ...current, [fieldId]: proposal.values })));
     setSources((current) => ({ ...current, [fieldId]: proposal.source }));
   }
 
@@ -1480,12 +1517,28 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       const next = await requestAnalysis(
         'document-enrichment',
         values,
-        'Classify every newly attached document by its contents, especially completed Asset Matrices and Creative Directions, then fill missing active fields with explicit evidence. Do not change confirmed values.',
+        automaticMessages['document-enrichment'],
       );
       mergeSuggestions(next);
       setAnalyzedDocumentIds(new Set(documents.map((document) => document.id)));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not analyze the new documents.');
+    } finally {
+      setBusy(false);
+      requestLock.current = false;
+    }
+  }
+
+  async function interpretClarification(message: string) {
+    if (requestLock.current || filesReading) return;
+    requestLock.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await requestAnalysis('follow-up', values, message);
+      mergeSuggestions(next);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not interpret this answer.');
     } finally {
       setBusy(false);
       requestLock.current = false;
@@ -1501,7 +1554,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       const next = await requestAnalysis(
         'follow-up',
         values,
-        'Review the current confirmed fields and dispositions. Ask only the next missing information.',
+        automaticMessages['follow-up-refresh'],
       );
       setAnalysis(next);
     } catch (caught) {
@@ -1524,9 +1577,11 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       const next = await requestAnalysis(
         'final-review',
         values,
-        'Prepare a concise final review. Identify unresolved or conflicting information without inventing values.',
+        automaticMessages['final-review'],
       );
       setAnalysis(next);
+      setSuggested((current) => ({ ...current, ...Object.fromEntries(next.proposals.map((proposal) => [proposal.fieldId, proposal])) }));
+      setAnalyzedDocumentIds(new Set(documents.map((document) => document.id)));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not prepare the AI review.');
     } finally {
@@ -1546,6 +1601,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setReviewNeedsSave(true);
     setReviewEditingFieldId(null);
     navigateToStage('intent', { replace: true, briefId: null });
+    contextRef.current = null;
+    setContext(null);
     setIntent('');
     setDocuments([]);
     setFilesReading(false);
@@ -1658,6 +1715,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   const clarificationQuestionById = new Map(
     (analysis?.questions || []).map((question) => [question.fieldId, question]),
   );
+  const activeReviewFields = new Set(activeFields(values).map((field) => field.id));
+  const reviewSuggestions = suggestionList.filter((proposal) => activeReviewFields.has(proposal.fieldId));
   const finalCandidates = (field: Field) => {
     const group = alternativeFieldsByPrimary.get(field.id);
     return group
@@ -1668,6 +1727,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   };
   const finalStatus = (field: Field): NonNullable<BriefPdfInput['rows'][number]['status']> => {
     const candidates = finalCandidates(field);
+    if (candidates.some((candidate) => suggested[candidate.id])) return 'Pending';
     if (candidates.some((candidate) => validValue(candidate, values[candidate.id], documents)))
       return 'Complete';
     if (candidates.some((candidate) => dispositions[candidate.id] === 'pending')) return 'Pending';
@@ -1686,7 +1746,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     if (provided.length) {
       const value = provided.join('; ');
       const notes = field.id === 'brand' ? brandExceptionNotes(values.brand) : [];
-      return notes.length ? `${value}\n${notes.join('\n')}` : value;
+      const label = candidates.some((candidate) => suggested[candidate.id]) ? `Suggested: ${value}` : value;
+      return notes.length ? `${label}\n${notes.join('\n')}` : label;
     }
     return finalStatus(field);
   };
@@ -1947,16 +2008,14 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                     : 'Save brief'}
               </button>
             ) : null}
-            {!(stage === 'final' && reviewOrigin === 'creator' && reviewNeedsSave) ? (
-              <button
-                type="button"
-                onClick={resetFlow}
-                disabled={busy || filesReading}
-                className="hidden items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-medium text-black/55 transition-colors hover:border-black/20 hover:bg-black/[0.03] hover:text-black disabled:cursor-not-allowed disabled:opacity-40 md:flex"
-              >
-                <RotateCcw className="size-3.5" /> New Brief
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={resetFlow}
+              disabled={busy || filesReading}
+              className="hidden items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-medium text-black/55 transition-colors hover:border-black/20 hover:bg-black/[0.03] hover:text-black disabled:cursor-not-allowed disabled:opacity-40 md:flex"
+            >
+              <RotateCcw className="size-3.5" /> New Brief
+            </button>
           </div>
         </div>
       </header>
@@ -1977,6 +2036,26 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
           >
             {error}
           </p>
+        ) : null}
+
+        {busy && analysisProgress ? (
+          <section
+            aria-label="Analysis progress"
+            className="sticky top-3 z-10 mx-auto mb-5 flex max-w-[1020px] items-start gap-3 rounded-2xl border border-[#6f35b6]/15 bg-[#f5effc] p-4 shadow-sm"
+          >
+            <LoaderCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin text-[#6f35b6] motion-reduce:animate-none" />
+            <div role="status" aria-live="polite" aria-atomic="true" className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-[#6f35b6]">
+                {analysisPhaseLabels[analysisProgress.phase]}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-black/60">
+                {analysisStageLabels[analysisProgress.stage]}
+              </p>
+            </div>
+            <p aria-live="off" className="shrink-0 text-xs leading-5 tabular-nums text-black/60">
+              Elapsed {Math.floor(analysisElapsedSeconds / 60)}:{String(analysisElapsedSeconds % 60).padStart(2, '0')}
+            </p>
+          </section>
         ) : null}
 
         {loadingBrief ? (
@@ -2333,6 +2412,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                     setClarificationFocusId(clarificationActive.field.id);
                     updateValue(fieldId, nextValue);
                   }}
+                  onInterpret={interpretClarification}
                   onAdvance={advanceClarification}
                   onDefer={() => {
                     updateDisposition(clarificationActive.field.id, 'pending');
@@ -2487,37 +2567,30 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                 </>
               ) : null}
               {reviewOrigin === 'library' || !reviewNeedsSave ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={downloadFinalBrief}
-                    disabled={
-                      busy ||
-                      drivePublishing ||
-                      Boolean(reviewEditingFieldId) ||
-                      (reviewOrigin === 'library' && !jiraBriefSaved)
-                    }
-                    className="h-12 rounded-full px-6 text-base"
-                  >
-                    <Download className="size-5" /> Download PDF
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetFlow}
-                    disabled={
-                      busy ||
-                      filesReading ||
-                      Boolean(reviewEditingFieldId) ||
-                      (reviewOrigin === 'library' && !jiraBriefSaved)
-                    }
-                    className="h-12 rounded-full px-6 text-base"
-                  >
-                    <RotateCcw className="size-5" /> New Brief
-                  </Button>
-                </>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={downloadFinalBrief}
+                  disabled={
+                    busy ||
+                    drivePublishing ||
+                    Boolean(reviewEditingFieldId) ||
+                    (reviewOrigin === 'library' && !jiraBriefSaved)
+                  }
+                  className="h-12 rounded-full px-6 text-base"
+                >
+                  <Download className="size-5" /> Download PDF
+                </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetFlow}
+                disabled={busy || filesReading}
+                className="h-12 rounded-full px-6 text-base"
+              >
+                <RotateCcw className="size-5" /> New Brief
+              </Button>
             </div>
             {reviewOrigin === 'creator' && reviewNeedsSave ? (
               <p
@@ -2525,7 +2598,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                 className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
               >
                 <AlertTriangle className="size-4 shrink-0 text-amber-700" />
-                Save this brief before downloading its PDF or starting a new request.
+                Save this brief before downloading its PDF.
               </p>
             ) : null}
             {reviewOrigin === 'creator' && !reviewNeedsSave ? (
@@ -2534,7 +2607,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                 className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
               >
                 <Check className="size-4 shrink-0" />
-                Brief saved. You can now download the PDF or start a new request.
+                Brief saved. You can now download the PDF.
               </p>
             ) : null}
             {reviewOrigin === 'library' && !canPublishProject ? (
@@ -2656,6 +2729,25 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                   <p key={warning}>{warning}</p>
                 ))}
               </div>
+            ) : null}
+            {reviewSuggestions.length ? (
+              <section className="mt-5 space-y-4 rounded-2xl border border-[#8e54d7]/20 bg-white p-5" aria-label="Suggested brief details">
+                <h2 className="font-semibold">Suggested details · please confirm</h2>
+                {reviewSuggestions.map((proposal) => (
+                  <div key={proposal.fieldId} className="border-t border-black/10 pt-3 text-sm">
+                    <p className="font-medium">{fieldById.get(proposal.fieldId)?.label}</p>
+                    <p className="mt-1">{displayValue(fieldById.get(proposal.fieldId)!, proposal.values, documents)}</p>
+                    <p className="mt-1 text-xs text-black/55">{sourceLabel(proposal.source, documents)} — {proposal.source.excerpt}</p>
+                    <div className="mt-2 flex gap-2">
+                      <Button disabled={busy} size="sm" onClick={() => acceptSuggestion(proposal.fieldId)}>Accept</Button>
+                      <Button disabled={busy} size="sm" variant="ghost" onClick={() => {
+                        updateValue(proposal.fieldId, []);
+                        updateDisposition(proposal.fieldId, 'pending');
+                      }}>Leave pending</Button>
+                    </div>
+                  </div>
+                ))}
+              </section>
             ) : null}
             <div className="mt-7">
               <BriefHtmlSummary

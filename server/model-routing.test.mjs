@@ -37,8 +37,9 @@ test('analysis omits conditional requirement decisions in every phase', () => {
     [],
   );
   assert.deepEqual(analysis.conditionalRequiredFieldIds, []);
-  for (const phase of ['follow-up', 'document-enrichment', 'final-review']) {
-    assert.deepEqual(analysisSchemaForPhase(phase), schema);
+  for (const phase of ['follow-up', 'final-review']) {
+    assert.deepEqual(analysisSchemaForPhase(phase).required, schema.required);
+    assert.ok(!('conditionalRequiredFieldIds' in analysisSchemaForPhase(phase).properties));
   }
 });
 
@@ -106,7 +107,7 @@ test('follow-up accepts document references without resending file contents', as
   assert.deepEqual(parsed.values.creativeDirection, ['doc1']);
   assert.equal(parsed.documents[0].data, '');
   await assert.rejects(
-    readAnalysisRequest(Readable.from([JSON.stringify({ ...input, phase: 'scope' })])),
+    readAnalysisRequest(Readable.from([JSON.stringify({ ...input, phase: 'document-reading' })])),
     /Invalid file/,
   );
 });

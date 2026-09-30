@@ -3,6 +3,7 @@ import {
   alternativeFieldGroups,
   fields,
   fieldIsRequired,
+  moduleIdByFieldId,
   validValue,
   type Attachment,
   type Field,
@@ -10,20 +11,6 @@ import {
   type Values,
 } from '../shared/brief-contract.ts';
 
-const generalIds = new Set([
-  'projectName',
-  'projectTitle',
-  'brand',
-  'region',
-  'mainApproverEmail',
-  'reviewerEmails',
-  'assetType',
-  'expectedDeliveryDate',
-  'mediaPlacementRetailer',
-  'totalAssets',
-  'creativeDirection',
-]);
-const additionalIds = new Set(['notes', 'attachments', 'links']);
 const deliverableIds = new Set([
   'requestTypes',
   'createDeliverables',
@@ -70,16 +57,12 @@ export const sectionDescriptions: Record<(typeof sectionOrder)[number], string> 
 };
 
 export function sectionFor(field: Field) {
-  if (generalIds.has(field.id)) return '01 · Project basics';
+  const moduleId = moduleIdByFieldId.get(field.id);
+  if (moduleId === '01') return '01 · Project basics';
+  if (moduleId === '03') return '03 · Delivery';
+  if (moduleId === '04') return '04 · Additional information';
   if (deliverableIds.has(field.id)) return '02A · Path and deliverables';
   if (productionIds.has(field.id)) return '02C · Production needs';
-  if (additionalIds.has(field.id)) return '04 · Additional information';
-  if (
-    field.id === 'deliveryTypes' ||
-    field.id === 'needsOpenFiles' ||
-    field.when.some((condition) => condition.field === 'deliveryTypes')
-  )
-    return '03 · Delivery';
   return '02B · Brief inputs';
 }
 

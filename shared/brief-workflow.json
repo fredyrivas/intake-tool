@@ -1,0 +1,333 @@
+{
+  "version": "2",
+  "automaticMessages": {
+    "document-enrichment": "Classify every newly attached document by its contents, especially completed Asset Matrices and Creative Directions, then fill missing active fields with explicit evidence. Do not change confirmed values.",
+    "follow-up-refresh": "Review the current confirmed fields and dispositions. Ask only the next missing information.",
+    "final-review": "Prepare the final review and propose evidence-supported values for the active Module 02–04 fields. Preserve confirmed values."
+  },
+  "tasks": {
+    "document-reading": {
+      "catalog": "none",
+      "contract": "reading",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-document-reading",
+        "response-intro",
+        "response-source",
+        "response-documentClassifications"
+      ],
+      "generalRuleIds": [
+        "evidence-confidence",
+        "personal-data"
+      ],
+      "documentRuleIds": [
+        "document-classification"
+      ],
+      "fieldCriteria": false
+    },
+    "scope": {
+      "catalog": "module-01-and-routes",
+      "contract": "analysis",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-scope",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "initial-proposals",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources"
+      ],
+      "fieldCriteria": true
+    },
+    "follow-up": {
+      "catalog": "missing-module-01",
+      "contract": "analysis",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-follow-up",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources"
+      ],
+      "fieldCriteria": true
+    },
+    "document-enrichment": {
+      "catalog": "active-fields",
+      "contract": "enrichment",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-document-enrichment",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings",
+        "response-documentClassifications"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources",
+        "document-classification"
+      ],
+      "fieldCriteria": true
+    },
+    "final-review": {
+      "catalog": "active-modules-02-04",
+      "contract": "analysis",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-final-review",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources"
+      ],
+      "fieldCriteria": true
+    }
+  },
+  "responseContracts": {
+    "definitions": {
+      "source": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "documentId",
+          "page",
+          "excerpt"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "document",
+              "note",
+              "interpretation"
+            ]
+          },
+          "documentId": {
+            "type": "string"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "webUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "documentClassifications": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "documentId",
+            "fieldId",
+            "page",
+            "excerpt"
+          ],
+          "properties": {
+            "documentId": {
+              "type": "string"
+            },
+            "fieldId": {
+              "$ref": "#/$defs/documentRole"
+            },
+            "page": {
+              "type": "integer"
+            },
+            "excerpt": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "facts": {
+        "type": "array",
+        "maxItems": 150,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "topic",
+            "value",
+            "source"
+          ],
+          "properties": {
+            "topic": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/source"
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "proposals",
+        "questions",
+        "warnings"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "fieldId",
+              "values",
+              "source"
+            ],
+            "properties": {
+              "fieldId": {
+                "type": "string"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "source": {
+                "$ref": "#/$defs/source"
+              }
+            }
+          }
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "fieldId",
+              "prompt",
+              "context",
+              "options"
+            ],
+            "properties": {
+              "fieldId": {
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "context": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "minItems": 0,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "facts",
+        "documentClassifications",
+        "warnings"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "facts": {
+          "$ref": "#/$defs/facts"
+        },
+        "documentClassifications": {
+          "$ref": "#/$defs/documentClassifications"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

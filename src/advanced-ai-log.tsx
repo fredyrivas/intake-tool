@@ -2,6 +2,7 @@ import { Activity, ChevronDown } from 'lucide-react';
 import type { AiRequestTrace } from '../shared/brief-contract';
 
 const phaseLabel: Record<AiRequestTrace['phase'], string> = {
+  'document-reading': 'Source reading',
   scope: 'Scope interpretation',
   'document-enrichment': 'Document enrichment',
   'follow-up': 'Missing-field guidance',
@@ -43,17 +44,36 @@ export function AdvancedAiLog({ traces }: { traces: AiRequestTrace[] }) {
                     <dd className="inline font-mono text-black/65">{trace.model}</dd>
                   </div>
                   <div>
-                    <dt className="inline text-black/40">Thinking: </dt>
+                    <dt className="inline text-black/40">Thinking level: </dt>
                     <dd className="inline text-black/65">{trace.thinkingLevel}</dd>
                   </div>
                   <div>
                     <dt className="inline text-black/40">Duration: </dt>
                     <dd className="inline text-black/65">{trace.durationMs.toLocaleString()} ms</dd>
                   </div>
-                  <div>
-                    <dt className="inline text-black/40">Tokens: </dt>
-                    <dd className="inline text-black/65">{tokenLabel(trace.totalTokens)}</dd>
+                  <div title="Time from sending the request until its response is received and validated, including polling and retries.">
+                    <dt className="inline text-black/40">Total elapsed: </dt>
+                    <dd className="inline tabular-nums text-black/65">
+                      {trace.totalDurationMs !== undefined
+                        ? `${(trace.totalDurationMs / 1000).toFixed(1)} s (${trace.totalDurationMs.toLocaleString()} ms)`
+                        : 'Unavailable'}
+                    </dd>
                   </div>
+                </dl>
+                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([
+                    ['Input tokens', trace.inputTokens],
+                    ['Thinking tokens', trace.thinkingTokens],
+                    ['Output tokens', trace.outputTokens],
+                    ['Total tokens', trace.totalTokens],
+                  ] as const).map(([label, value]) => (
+                    <div key={label} className="rounded-lg bg-black/[0.035] px-3 py-2">
+                      <dt className="text-[10px] text-black/45">{label}</dt>
+                      <dd className="mt-1 font-mono tabular-nums text-black/75">
+                        {tokenLabel(value)}
+                      </dd>
+                    </div>
+                  ))}
                 </dl>
                 {trace.requestSummary ? (
                   <p className="mt-2 text-black/55">
@@ -67,10 +87,40 @@ export function AdvancedAiLog({ traces }: { traces: AiRequestTrace[] }) {
                     .
                   </p>
                 ) : null}
-                <p className="mt-1 text-black/45">
-                  Input {tokenLabel(trace.inputTokens)} · Output {tokenLabel(trace.outputTokens)} ·
-                  Thinking {tokenLabel(trace.thinkingTokens)} tokens
-                </p>
+                {trace.outcome ? (
+                  <p className="mt-1 text-black/55">
+                    Result: {trace.outcome}
+                    {trace.errorCode ? ` · ${trace.errorCode}` : ''}
+                    {trace.failureStage ? ` · ${trace.failureStage}` : ''}
+                    {trace.origin ? ` · Origin: ${trace.origin}` : ''}
+                    {trace.httpStatus ? ` · App HTTP ${trace.httpStatus}` : ''}
+                    {trace.providerStatus ? ` · Provider HTTP ${trace.providerStatus}` : ''}
+                    {trace.interactionStatus ? ` · Interaction ${trace.interactionStatus}` : ''}
+                    {trace.attempts && trace.attempts.length > 1
+                      ? ` · ${trace.attempts.length} attempts (automatic recovery)` : ''}
+                  </p>
+                ) : null}
+                {trace.attempts?.map((attempt, index) => (
+                  <p key={index} className="mt-1 text-black/45">
+                    Attempt {index + 1}: {attempt.errorCode ?? attempt.interactionStatus ?? 'Unknown'}
+                    {attempt.providerStatus ? ` · Provider HTTP ${attempt.providerStatus}` : ''}
+                    {attempt.interactionId ? ` · Interaction ${attempt.interactionId}` : ''}
+                    {attempt.statusChecks ? ` · ${attempt.statusChecks} status checks (${attempt.initialInteractionStatus} → ${attempt.interactionStatus})` : ''}
+                    {attempt.stepTypes?.length ? ` · Steps: ${attempt.stepTypes.join(', ')}` : ''}
+                    {attempt.responseCharacters !== undefined ? ` · ${attempt.responseCharacters} response characters` : ''}
+                    {attempt.validationIssue ? ` · ${attempt.validationIssue}` : ''}
+                    {' · '}{attempt.thinkingLevel}
+                    {' · '}{tokenLabel(attempt.inputTokens)} input tokens
+                    {' · '}{tokenLabel(attempt.thinkingTokens)} thinking tokens
+                    {' · '}{tokenLabel(attempt.outputTokens)} output tokens
+                    {' · '}{tokenLabel(attempt.totalTokens)} total tokens
+                  </p>
+                ))}
+                <p className="mt-1 font-mono text-[10px] text-black/40">Request: {trace.id}</p>
+                <a className="mt-1 inline-block text-[10px] underline" download={`analysis-${trace.id}.json`}
+                  href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(trace, null, 2))}`}>
+                  Download diagnostics
+                </a>
                 <p className="mt-2 text-black/45">{trace.reason}</p>
               </li>
             ))}
