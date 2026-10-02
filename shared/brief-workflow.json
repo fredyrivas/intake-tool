@@ -1,9 +1,11 @@
 {
-  "version": "2",
+  "version": "3",
   "automaticMessages": {
     "document-enrichment": "Classify every newly attached document by its contents, especially completed Asset Matrices and Creative Directions, then fill missing active fields with explicit evidence. Do not change confirmed values.",
     "follow-up-refresh": "Review the current confirmed fields and dispositions. Ask only the next missing information.",
-    "final-review": "Prepare the final review and propose evidence-supported values for the active Module 02–04 fields. Preserve confirmed values."
+    "final-review": "Prepare the final review and propose evidence-supported values for the active Module 02–04 fields. Preserve confirmed values.",
+    "route-selection": "Identify only the Type of Content Brief from the intent, original evidence and provisional general information. Ask a focused question when the route is ambiguous.",
+    "route-details": "Extract evidence-supported details for the supplied provisional route and task catalog. Preserve user adjustments; these values still require confirmation."
   },
   "tasks": {
     "document-reading": {
@@ -117,6 +119,88 @@
         "identity",
         "untrusted-input",
         "task-final-review",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources"
+      ],
+      "fieldCriteria": true
+    },
+    "general-information": {
+      "catalog": "module-01",
+      "contract": "enrichment",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-general-information",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings",
+        "response-documentClassifications"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "initial-proposals",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [
+        "document-questions",
+        "alternative-resources",
+        "document-classification"
+      ],
+      "fieldCriteria": true
+    },
+    "route-selection": {
+      "catalog": "routes",
+      "contract": "analysis",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-route-selection",
+        "response-intro",
+        "response-summary",
+        "response-proposals",
+        "response-source",
+        "response-questions",
+        "response-warnings"
+      ],
+      "generalRuleIds": [
+        "catalog-authority",
+        "initial-proposals",
+        "confirmed-values",
+        "evidence-confidence",
+        "personal-data",
+        "completion"
+      ],
+      "documentRuleIds": [],
+      "fieldCriteria": true
+    },
+    "route-details": {
+      "catalog": "route-modules-02-04",
+      "contract": "analysis",
+      "instructionIds": [
+        "identity",
+        "untrusted-input",
+        "task-route-details",
         "response-intro",
         "response-summary",
         "response-proposals",

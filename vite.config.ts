@@ -9,8 +9,8 @@ import { jiraIntegrationPlugin } from './server/jira-integration.ts';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const routingModel = env.GEMINI_ROUTING_MODEL || 'gemini-3.8-flash';
   const extractionModel = env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash-lite';
+  const routingModel = extractionModel;
 
   return {
     plugins: [

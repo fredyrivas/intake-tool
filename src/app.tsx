@@ -25,6 +25,7 @@ import {
 import { Button, Card, CardContent, Input, Label, Textarea } from '@monksflow/monks-ui';
 import { AdvancedAiLog } from './advanced-ai-log';
 import { runBriefAnalysis } from './brief-analysis-flow';
+import { runProgressiveScope, type ScopePhase } from './progressive-scope';
 import { restoreAnalysisContext, type AnalysisContext } from '../shared/brief-context';
 import { BriefForm, FieldInput, type Disposition } from './brief-form';
 import { clarificationItemResolved, clarificationItemsFor } from './brief-sections';
@@ -47,6 +48,7 @@ import {
   fieldIsRequired,
   fields,
   generatedProjectName,
+  moduleIdByFieldId,
   parseAnalysis,
   presentationMimeType,
   validValue,
@@ -62,6 +64,9 @@ import {
 } from '../shared/brief-contract';
 
 const analysisPhaseLabels: Record<AnalysisPhase, string> = {
+  'general-information': 'Reading your general information',
+  'route-selection': 'Identifying your content brief type',
+  'route-details': 'Preparing details for your brief',
   'document-reading': 'Reading your sources',
   scope: 'Preparing your scope',
   'document-enrichment': 'Reading new documents',
@@ -104,6 +109,7 @@ function stageFromPath(pathname: string): Stage | null {
 
 type SavedBriefDraft = {
   version: 4;
+  scopeReady?: boolean;
   context: AnalysisContext | null;
   stage: Stage;
   intent: string;
@@ -301,6 +307,7 @@ function readSavedDraft(documents: Attachment[]): SavedBriefDraft & { documents:
       : 'intent';
     return {
       ...empty,
+      scopeReady: value.scopeReady === true,
       stage: stage === 'intent' || analysis ? (stage === 'brief' ? 'clarify' : stage) : 'intent',
       intent: typeof value.intent === 'string' ? value.intent.slice(0, 6000) : '',
       analysis,
@@ -842,6 +849,10 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   const [filesReading, setFilesReading] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(savedDraft.analysis);
   const [proposals, setProposals] = useState<Proposal[]>(savedDraft.proposals);
+  const scopeProposalsRef = useRef(savedDraft.proposals);
+  const scopeRevision = useRef(0);
+  const [scopeReady, setScopeReady] = useState(savedDraft.scopeReady === true && Boolean(context));
+  const [scopePhase, setScopePhase] = useState<ScopePhase | null>(null);
   const [values, setValues] = useState<Values>(savedDraft.values);
   const [sources, setSources] = useState<Record<string, Source>>(savedDraft.sources);
   const [suggested, setSuggested] = useState<Record<string, Proposal>>(
@@ -857,6 +868,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     () => new Set(savedDraft.analyzedDocumentIds),
   );
   const [traces, setTraces] = useState<AiRequestTrace[]>(savedDraft.traces);
+  const tracesRef = useRef(savedDraft.traces);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
@@ -892,6 +904,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   const currentDraft = useMemo<SavedBriefDraft>(
     () => ({
       version: 4,
+      scopeReady,
       context,
       stage: stage === 'briefs' ? 'intent' : stage,
       intent,
@@ -908,6 +921,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     [
       context,
       analysis,
+      scopeReady,
       analyzedDocumentIds,
       clarificationHistory,
       dispositions,
@@ -920,6 +934,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
       values,
     ],
   );
+  const draftRef = useRef(currentDraft);
+  useEffect(() => { draftRef.current = currentDraft; }, [currentDraft]);
   const proposalValues = useMemo<Values>(
     () => Object.fromEntries(proposals.map((proposal) => [proposal.fieldId, proposal.values])),
     [proposals],
@@ -1001,6 +1017,10 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setDocuments(brief.documents || []);
     setAnalysis(draft.analysis || null);
     setProposals(draft.proposals || []);
+    scopeProposalsRef.current = draft.proposals || [];
+    scopeRevision.current += 1;
+    setScopeReady(draft.scopeReady === true && Boolean(contextRef.current));
+    setScopePhase(null);
     setValues(restoreLegacyClarificationValues(draft, brief.documents || []));
     setSources(draft.sources || {});
     setSuggested(
@@ -1012,6 +1032,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setClarificationBackId(null);
     setAnalyzedDocumentIds(new Set(draft.analyzedDocumentIds || []));
     setTraces(draft.traces || []);
+    tracesRef.current = draft.traces || [];
     setEditing(null);
     setReviewOrigin(origin);
     setReviewNeedsSave(false);
@@ -1274,7 +1295,8 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
 
   function recordTrace(trace: AiRequestTrace) {
     console.info('[Brief AI request]', trace);
-    setTraces((current) => [...current.filter((item) => item.id !== trace.id).slice(-19), trace]);
+    tracesRef.current = [...tracesRef.current.filter((item) => item.id !== trace.id).slice(-19), trace];
+    setTraces(tracesRef.current);
   }
 
   async function requestAnalysis(
@@ -1283,13 +1305,15 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     message: string,
     currentDocuments = documents,
     currentDispositions = dispositions,
+    provisionalValues: Values = {},
   ) {
-    const requestTraces = [...traces];
+    const requestTraces = [...tracesRef.current];
     setAnalysisStartedAt(performance.now());
     setAnalysisElapsedSeconds(0);
     try {
       return await runBriefAnalysis({
         phase, intent, message, documents: currentDocuments,
+        provisionalValues,
         values: Object.fromEntries(Object.entries(currentValues).filter(([id]) => !suggested[id])),
         dispositions: currentDispositions,
         pendingProposals: suggestionList.map(({ fieldId, values: proposed }) => ({ fieldId, values: proposed })),
@@ -1309,7 +1333,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
           recordTrace(trace);
         },
         checkpoint: async (nextContext) => {
-          const draft = { ...currentDraft, context: nextContext, traces: requestTraces.slice(-20) };
+          const draft = { ...draftRef.current, context: nextContext, traces: requestTraces.slice(-20) };
           // A completed reading must survive a failed second call or a reload.
           if (currentBriefId) {
             const response = await fetch(`/api/briefs/${currentBriefId}`, {
@@ -1372,45 +1396,70 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setAnalysis(nextAnalysis);
   }
 
-  async function analyzeRequest() {
+  async function analyzeRequest({ resume = false } = {}) {
     if (!intent.trim() || requestLock.current || filesReading) return;
     requestLock.current = true;
     setBusy(true);
+    setScopeReady(false);
+    setSuggested({});
     setError('');
     try {
-      const next = await requestAnalysis('scope', {}, intent.trim());
-      setAnalysis(next);
-      setProposals(
-        Array.from(
-          new Map(
-            next.proposals
-              .filter((proposal) => proposal.fieldId !== 'projectName')
-              .map((proposal) => [proposal.fieldId, proposal]),
-          ).values(),
+      const ready = await runProgressiveScope(documents, {
+        analyze: (phase, provisional) => requestAnalysis(
+          phase, {}, phase === 'general-information' ? intent.trim() : automaticMessages[phase],
+          documents, dispositions, provisional,
         ),
-      );
+        proposals: () => scopeProposalsRef.current,
+        revision: () => scopeRevision.current,
+        onStage: setScopePhase,
+        publish: (phase, next) => {
+          if (phase === 'general-information') {
+            scopeProposalsRef.current = next.proposals.filter(
+              (proposal) => moduleIdByFieldId.get(proposal.fieldId) === '01',
+            );
+            setProposals(scopeProposalsRef.current);
+            setAnalysis(next);
+            setEditing(null);
+            navigateToStage('review');
+          } else if (phase === 'route-selection') {
+            scopeProposalsRef.current = [
+              ...scopeProposalsRef.current.filter((proposal) => proposal.fieldId !== 'requestTypes'),
+              ...next.proposals.filter((proposal) => proposal.fieldId === 'requestTypes'),
+            ];
+            setProposals(scopeProposalsRef.current);
+            setAnalysis((current) => ({
+              ...next,
+              summary: current?.summary || next.summary,
+              questions: [...(current?.questions.filter((question) => question.fieldId !== 'requestTypes') || []), ...next.questions],
+              warnings: [...new Set([...(current?.warnings || []), ...next.warnings])],
+            }));
+          } else {
+            setSuggested(Object.fromEntries(next.proposals.map((proposal) => [proposal.fieldId, proposal])));
+            setAnalysis((current) => current ? {
+              ...current,
+              questions: [...current.questions, ...next.questions],
+              warnings: [...new Set([...current.warnings, ...next.warnings])],
+            } : next);
+          }
+        },
+      }, resume);
+      setScopeReady(ready);
       setAnalyzedDocumentIds(new Set(documents.map((document) => document.id)));
-      setEditing(null);
-      navigateToStage('review');
     } catch (caught) {
-      setError(
-        caught instanceof Error && caught.name !== 'TimeoutError'
-          ? caught.message
-          : 'The interpretation took too long. Please try again.',
-      );
+      setError(caught instanceof Error ? caught.message : 'The interpretation took too long. Please try again.');
     } finally {
+      setScopePhase(null);
       setBusy(false);
       requestLock.current = false;
     }
   }
 
   function confirmScope() {
-    if (!hasRouteProposal || requestLock.current || filesReading) return;
+    if (!scopeReady || !hasRouteProposal || requestLock.current || filesReading || editing) return;
     const confirmed = withGeneratedProjectName(cleanValues(proposalValues, documents));
     setError('');
     setValues(confirmed);
     setSources(Object.fromEntries(proposals.map((proposal) => [proposal.fieldId, proposal.source])));
-    setSuggested({});
     setClarificationHistory([]);
     setClarificationFocusId(null);
     setClarificationBackId(null);
@@ -1418,29 +1467,28 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
   }
 
   const updateProposal = (fieldId: string, nextValues: string[]) => {
-    setProposals((current) => {
-      const existing = current.find((proposal) => proposal.fieldId === fieldId);
-      const replacement: Proposal = {
-        fieldId,
-        values: nextValues,
-        source: {
-          kind: 'note',
-          documentId: '',
-          page: 0,
-          excerpt: `Adjusted by the requester — ${fieldById.get(fieldId)?.label}: ${nextValues.join(', ')}`,
-        },
-      };
-      const updated = existing
-        ? current.map((proposal) => (proposal.fieldId === fieldId ? replacement : proposal))
-        : [replacement, ...current];
-      if (fieldId !== 'requestTypes') return updated;
-      const candidateValues = Object.fromEntries(
-        updated.map((proposal) => [proposal.fieldId, proposal.values]),
-      );
-      const active = new Set(activeFields(candidateValues).map((field) => field.id));
-      return updated.filter((proposal) => active.has(proposal.fieldId));
-    });
+    const replacement: Proposal = {
+      fieldId,
+      values: nextValues,
+      source: {
+        kind: 'note', documentId: '', page: 0,
+        excerpt: `Adjusted by the requester — ${fieldById.get(fieldId)?.label}: ${nextValues.join(', ')}`,
+      },
+    };
+    const updated = scopeProposalsRef.current.filter((proposal) =>
+      proposal.fieldId !== fieldId &&
+      (fieldId === 'requestTypes' || proposal.fieldId !== 'requestTypes' ||
+        (proposal.source.kind === 'note' && proposal.source.excerpt.startsWith('Adjusted by the requester —'))),
+    );
+    if (nextValues.length) updated.push(replacement);
+    scopeProposalsRef.current = updated;
+    scopeRevision.current += 1;
+    setProposals(updated);
+    setScopeReady(false);
+    setSuggested({});
     setEditing(null);
+    // A running sequence observes the revision and discards its stale result.
+    if (!requestLock.current) void analyzeRequest({ resume: true });
   };
 
   function updateValue(fieldId: string, nextValue: string[]) {
@@ -1608,6 +1656,10 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setFilesReading(false);
     setAnalysis(null);
     setProposals([]);
+    scopeProposalsRef.current = [];
+    scopeRevision.current += 1;
+    setScopeReady(false);
+    setScopePhase(null);
     setValues({});
     setSources({});
     setSuggested({});
@@ -1617,6 +1669,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
     setClarificationBackId(null);
     setAnalyzedDocumentIds(new Set());
     setTraces([]);
+    tracesRef.current = [];
     setEditing(null);
     setError('');
     setStorageWarning('');
@@ -2152,6 +2205,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
           <div className="mx-auto max-w-[920px]">
             <button
               type="button"
+              disabled={busy}
               onClick={() => navigateToStage('intent')}
               className="mb-7 flex items-center gap-2 text-sm font-medium text-black/55 hover:text-black"
             >
@@ -2179,7 +2233,14 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                   </div>
                 ) : null}
                 <div className="space-y-3">
-                  {!hasRouteProposal ? (
+                  {!hasRouteProposal && busy ? (
+                    <article aria-busy="true" className="rounded-[20px] border border-black/10 bg-black/[0.025] p-5 text-black/45">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Type of Content Brief</p>
+                      <p role="status" className="mt-2 flex items-center gap-2 text-sm">
+                        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Identifying the best path…
+                      </p>
+                    </article>
+                  ) : !hasRouteProposal ? (
                     <article className="rounded-[20px] border border-red-200 bg-white p-5">
                       <div className="flex items-start justify-between gap-4">
                         <div>
@@ -2244,6 +2305,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                             type="button"
                             variant="ghost"
                             size="sm"
+                            disabled={busy && (field.type === 'document' || (field.id === 'requestTypes' && scopePhase === 'route-selection'))}
                             onClick={() => setEditing(editing === field.id ? null : field.id)}
                             className="shrink-0 rounded-full"
                           >
@@ -2296,7 +2358,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                     type="button"
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void analyzeRequest()}
+                    onClick={() => void analyzeRequest({ resume: true })}
                     className="rounded-full"
                   >
                     <RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} /> Retry
@@ -2304,7 +2366,7 @@ function BriefApp({ savedDraft }: { savedDraft: SavedBriefDraft & { documents: A
                   </Button>
                   <Button
                     type="button"
-                    disabled={!hasRouteProposal || busy}
+                    disabled={!scopeReady || !hasRouteProposal || busy || filesReading || Boolean(editing)}
                     onClick={() => void confirmScope()}
                     className="rounded-full bg-[#171717] px-5 text-white hover:bg-[#303030]"
                   >

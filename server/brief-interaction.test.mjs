@@ -55,6 +55,34 @@ async function read() {
   return (await finishInteraction(output(reading), input)).context;
 }
 
+test('general information creates the source checkpoint and proposes only Module 01', async () => {
+  const result = await finishInteraction(output({ ...reading, ...analysis([
+    proposal('brand', ['Glade']), proposal('requestTypes', ['EVOLVE']), proposal('evolveNeeds', ['Translation']),
+  ]) }), { ...input, phase: 'general-information' });
+  assert.deepEqual(result.analysis.proposals.map((item) => item.fieldId), ['brand', 'creativeDirection']);
+  assert.equal(result.context.readingInteractionId, 'interaction-1');
+  assert.equal(result.context.documents.length, 1);
+  assert.deepEqual(result.context.reading.facts, reading.facts);
+});
+
+test('route decisions stay separate and details use a provisional branch without confirming it', async () => {
+  const context = await read();
+  const documents = [{ ...doc, data: '' }];
+  const route = await finishInteraction(output(analysis([
+    proposal('requestTypes', ['EVOLVE']), proposal('brand', ['Glade']),
+  ])), { ...input, phase: 'route-selection', context, documents, provisionalValues: { brand: ['Glade'] } });
+  assert.deepEqual(route.analysis.proposals.map((item) => item.fieldId), ['requestTypes']);
+  const details = await finishInteraction(output(analysis([
+    proposal('requestTypes', ['CREATE']), proposal('brand', ['Raid']),
+    proposal('evolveNeeds', ['VO recording']), proposal('voLanguage', ['English']),
+    proposal('createDeliverables', ['National campaign films / TVC']),
+  ])), { ...input, phase: 'route-details', context: route.context, documents,
+    provisionalValues: { requestTypes: ['EVOLVE'], brand: ['Glade'] } });
+  assert.deepEqual(details.analysis.proposals.map((item) => item.fieldId), ['evolveNeeds', 'voLanguage']);
+  assert.equal(details.context.latestInteractionId, 'interaction-1');
+  assert.deepEqual(input.values, {});
+});
+
 test('reading validates evidence, classifications and context invalidation', async () => {
   const context = await read();
   assert.equal(restoreAnalysisContext(context, [doc]).readingInteractionId, 'interaction-1');
@@ -216,7 +244,7 @@ test('native PDF/image input and provider citations are adapted without trusting
   );
 });
 
-test('endpoint chains real request assembly through a simulated interactions client', async () => {
+test('endpoint assembles the three progressive requests with scoped catalogs and retained evidence', async () => {
   const calls = [];
   const plugin = briefAnalysisPlugin(
     {
@@ -230,7 +258,9 @@ test('endpoint chains real request assembly through a simulated interactions cli
         calls.push(params);
         return {
           ...output(
-            calls.length === 1 ? reading : analysis([proposal('brand', ['Glade'])]),
+            calls.length === 1 ? { ...reading, ...analysis([proposal('brand', ['Glade'])]) }
+              : calls.length === 2 ? analysis([proposal('requestTypes', ['EVOLVE'])])
+              : analysis([proposal('evolveNeeds', ['Translation'])]),
             `call-${calls.length}`,
           ),
           usage: {
@@ -277,22 +307,40 @@ test('endpoint chains real request assembly through a simulated interactions cli
     assert.equal(status, 200, JSON.stringify(result));
     return result;
   }
-  const first = await post(input);
+  const first = await post({ ...input, phase: 'general-information' });
   assert.equal(first.trace.inputTokens, 30);
   const second = await post({
     ...input,
-    phase: 'scope',
+    phase: 'route-selection',
+    provisionalValues: { brand: ['Glade'] },
     context: first.context,
     documents: [{ ...doc, data: '' }],
   });
   assert.equal(second.context.latestInteractionId, 'call-2');
+  const third = await post({
+    ...input, phase: 'route-details', context: second.context,
+    provisionalValues: { brand: ['Glade'], requestTypes: ['EVOLVE'] },
+    documents: [{ ...doc, data: '' }],
+  });
+  assert.deepEqual(third.analysis.proposals.map((item) => item.fieldId), ['evolveNeeds']);
   assert.equal(calls[0].previous_interaction_id, undefined);
   assert.equal(calls[1].previous_interaction_id, 'call-1');
   assert.notEqual(calls[0].system_instruction, calls[1].system_instruction);
   assert.equal(calls[0].store, true);
-  assert.equal(JSON.parse(calls[0].input[0].text).catalog.length, 0);
-  assert.equal(JSON.parse(calls[1].input[0].text).catalog.length, 11);
+  const sent = calls.map((call) => JSON.parse(call.input[0].text));
+  assert.equal(sent[0].catalog.length, 10);
+  assert.deepEqual(sent[1].catalog.map((field) => field.id), ['requestTypes']);
+  assert.ok(!sent[2].catalog.some((field) => ['brand', 'requestTypes', 'createDeliverables'].includes(field.id)));
+  assert.equal(sent[0].routeDecisionGuide, undefined);
+  assert.ok(sent[1].routeDecisionGuide);
+  assert.equal(sent[2].routeDecisionGuide, undefined);
+  assert.deepEqual(sent[1].sourceFacts, first.context.reading.facts);
+  assert.deepEqual(sent[2].confirmed, {});
+  assert.deepEqual(sent[2].provisionalValues.requestTypes, ['EVOLVE']);
+  assert.equal(calls[2].previous_interaction_id, 'call-2');
   assert.equal(calls[1].input.length, 1);
-  assert.deepEqual(calls[0].tools, []);
-  assert.deepEqual(calls[1].tools, [{ type: 'google_search' }]);
+  assert.equal(calls[2].input.length, 1);
+  assert.deepEqual(calls[0].tools, [{ type: 'google_search' }]);
+  assert.deepEqual(calls[1].tools, []);
+  assert.deepEqual(calls[2].tools, []);
 });

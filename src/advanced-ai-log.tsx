@@ -2,6 +2,9 @@ import { Activity, ChevronDown } from 'lucide-react';
 import type { AiRequestTrace } from '../shared/brief-contract';
 
 const phaseLabel: Record<AiRequestTrace['phase'], string> = {
+  'general-information': 'General information',
+  'route-selection': 'Content brief type',
+  'route-details': 'Route details',
   'document-reading': 'Source reading',
   scope: 'Scope interpretation',
   'document-enrichment': 'Document enrichment',

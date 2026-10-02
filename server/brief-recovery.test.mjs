@@ -51,9 +51,11 @@ function harness(create, get = () => assert.fail('Unexpected status check'), wai
   return { calls, options, post, journal, checks, waits };
 }
 
-async function scopeInput() {
-  const { context } = await finishInteraction(output(reading, 'source-checkpoint'), input);
-  return { ...input, phase: 'scope', context, documents: [{ ...doc, data: '' }] };
+async function scopeInput(sourceReading = reading, document = doc) {
+  const { context } = await finishInteraction(output(sourceReading, 'source-checkpoint'), {
+    ...input, documents: [document],
+  });
+  return { ...input, phase: 'scope', context, documents: [{ ...document, data: '' }] };
 }
 
 for (const status of ['completed', 'incomplete']) {
@@ -67,9 +69,9 @@ for (const status of ['completed', 'incomplete']) {
     assert.equal(result.context.latestInteractionId, 'recovered');
     assert.equal(result.context.readingInteractionId, 'source-checkpoint');
     assert.equal(h.calls.length, 2);
-    assert.equal(h.calls[0].generation_config.thinking_level, 'medium');
-    assert.equal(h.calls[1].generation_config.thinking_level, 'low');
     for (const params of h.calls) {
+      assert.equal(params.model, 'gemini-3.5-flash-lite');
+      assert.equal(params.generation_config.thinking_level, 'low');
       assert.equal('max_output_tokens' in params.generation_config, false);
       assert.equal(params.previous_interaction_id, 'source-checkpoint');
       assert.equal(params.input.length, 1);
@@ -100,8 +102,75 @@ test('a valid JSON with unsupported evidence is regenerated, never accepted', as
   assert.equal(result.trace.attempts[0].errorCode, 'INVALID_ANALYSIS');
   assert.equal(result.trace.attempts[0].validationIssue, 'Missing document evidence.');
   assert.match(h.calls[1].system_instruction, /Missing document evidence/);
+  assert.match(h.calls[1].system_instruction, /Correct proposals\[0\]\.source\.documentId/);
+  assert.equal(result.trace.attempts[0].validationDetail.fieldId, 'brand');
+  assert.deepEqual(JSON.parse(h.calls[1].input[1].text).rejectedProposal.source,
+    { kind: 'document', documentId: 'invented', page: 0, excerpt: 'Glade' });
+  assert.ok(!JSON.stringify(h.journal).includes('"documentId":"invented"'));
+  assert.ok(!JSON.stringify(h.journal).includes('rejectedProposal'));
   assert.ok(!result.analysis.proposals.some((p) => p.source.documentId === 'invented'));
 });
+
+test('scope receives validated facts and keeps evidence constraints with the fixed model and LOW thinking', async () => {
+  const source = { kind: 'document', documentId: doc.id, page: 0, excerpt: 'Refresh Glade assets.' };
+  const facts = [{ topic: 'brand', value: 'Glade', source }];
+  const h = harness(() => output({ ...analysis,
+    proposals: [{ fieldId: 'brand', values: ['Glade'], source }] }));
+  const { status, result } = await h.post(await scopeInput({ ...reading, facts }));
+  assert.equal(status, 200);
+  assert.deepEqual(JSON.parse(h.calls[0].input[0].text).sourceFacts, facts);
+  assert.deepEqual(result.analysis.proposals.find((p) => p.fieldId === 'brand').source, source);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].model, 'gemini-3.5-flash-lite');
+  assert.equal(h.calls[0].generation_config.thinking_level, 'low');
+  const branches = h.calls[0].response_format.schema.properties.proposals.items.properties.source.anyOf;
+  assert.deepEqual(branches.find((b) => b.properties.kind.enum.includes('document')).properties.documentId.enum, [doc.id]);
+  for (const kind of ['note', 'interpretation']) {
+    const branch = branches.find((b) => b.properties.kind.enum.includes(kind));
+    assert.deepEqual(branch.properties.documentId.enum, ['']);
+    assert.deepEqual(branch.properties.page.enum, [0]);
+  }
+  assert.ok('webUrl' in branches.find((b) => b.properties.kind.enum.includes('note')).properties);
+  assert.ok(!('webUrl' in branches.find((b) => b.properties.kind.enum.includes('interpretation')).properties));
+});
+
+for (const failure of [
+  { name: 'missing PDF page', document: { ...doc, mimeType: 'application/pdf' },
+    source: { kind: 'document', documentId: doc.id, page: 0, excerpt: 'Refresh Glade assets.' },
+    property: '.page', corrected: { kind: 'document', documentId: doc.id, page: 1, excerpt: 'Refresh Glade assets.' } },
+  { name: 'empty document excerpt', document: doc,
+    source: { kind: 'document', documentId: doc.id, page: 0, excerpt: '' },
+    property: '.excerpt', corrected: { kind: 'document', documentId: doc.id, page: 0, excerpt: 'Refresh Glade assets.' } },
+  { name: 'non-document locator', document: doc,
+    source: { kind: 'note', documentId: doc.id, page: 2, excerpt: 'Refresh Glade' },
+    property: '', corrected: { kind: 'note', documentId: '', page: 0, excerpt: 'Refresh Glade' } },
+]) {
+  test(`repairs ${failure.name} with the rejected proposal and a precise rule`, async () => {
+    const h = harness((attempt, params) => {
+      if (attempt === 2) {
+        const recovery = JSON.parse(params.input[1].text);
+        assert.deepEqual(recovery.rejectedProposal.source, failure.source);
+        assert.equal(recovery.validationDetail.path, `proposals[0].source${failure.property}`);
+        assert.ok(params.system_instruction.includes(recovery.validationDetail.rule));
+      }
+      return output({ ...analysis, proposals: [{ fieldId: 'brand', values: ['Glade'],
+        source: attempt === 1 ? failure.source : failure.corrected }] });
+    });
+    const sourceReading = { ...reading,
+      documentClassifications: [{ ...reading.documentClassifications[0],
+        page: failure.document.mimeType === 'application/pdf' ? 1 : 0 }] };
+    const { status, result } = await h.post(await scopeInput(sourceReading, failure.document));
+    assert.equal(status, 200);
+    assert.equal(h.calls.length, 2);
+    assert.equal(result.trace.attempts[0].validationDetail.path, `proposals[0].source${failure.property}`);
+    assert.deepEqual(result.analysis.proposals.find((p) => p.fieldId === 'brand').source, failure.corrected);
+    for (const params of h.calls) {
+      assert.equal(params.model, 'gemini-3.5-flash-lite');
+      assert.equal(params.generation_config.thinking_level, 'low');
+      assert.equal(params.previous_interaction_id, 'source-checkpoint');
+    }
+  });
+}
 
 test('requires_action reconciles the same Google Search interaction without regenerating', async () => {
   const usage = { total_input_tokens: 21512, total_output_tokens: 1462,
@@ -240,7 +309,7 @@ test('rate limit retries preserve the separate single output recovery', async ()
   assert.equal(h.calls.length, 4);
   assert.deepEqual(h.calls[0], h.calls[1]);
   assert.deepEqual(h.calls[2], h.calls[3]);
-  assert.equal(h.calls[0].generation_config.thinking_level, 'medium');
+  assert.equal(h.calls[0].generation_config.thinking_level, 'low');
   assert.equal(h.calls[2].generation_config.thinking_level, 'low');
   assert.match(h.calls[3].system_instruction, /rejected \(INVALID_JSON\)/);
   assert.ok(h.calls.every((params) => params.previous_interaction_id === 'source-checkpoint'));

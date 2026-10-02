@@ -20,7 +20,7 @@ const input = {
   pendingProposals: [],
   context: null,
 };
-function harness({ failScope = false, expireOnce = false } = {}) {
+function harness({ failScope = false, expireOnce = false, dataByPhase = {} } = {}) {
   const progress = [], calls = [],
     checkpoints = [];
   let saved = null;
@@ -56,7 +56,7 @@ function harness({ failScope = false, expireOnce = false } = {}) {
       const data =
         request.phase === 'document-reading'
           ? reading
-          : { ...reading, proposals: [], questions: [] };
+          : { ...reading, proposals: [], questions: [], ...dataByPhase[request.phase] };
       const result = await finishInteraction(
         {
           id: `id-${calls.length}`,
@@ -71,6 +71,24 @@ function harness({ failScope = false, expireOnce = false } = {}) {
   };
   return { calls, checkpoints, progress, dependencies, saved: () => saved };
 }
+
+test('the progressive path makes three chained calls, uploading sources only with general information', async () => {
+  const source = { kind: 'interpretation', documentId: '', page: 0, excerpt: 'Refresh an existing campaign' };
+  const h = harness({ dataByPhase: {
+    'route-selection': { proposals: [{ fieldId: 'requestTypes', values: ['EVOLVE'], source }] },
+    'route-details': { proposals: [{ fieldId: 'evolveNeeds', values: ['Translation'], source }] },
+  } });
+  const general = await runBriefAnalysis({ ...input, phase: 'general-information' }, h.dependencies);
+  assert.ok(general.proposals.some((item) => item.fieldId === 'creativeDirection'));
+  await runBriefAnalysis({ ...input, phase: 'route-selection', context: h.saved(), provisionalValues: { brand: ['Glade'] } }, h.dependencies);
+  const details = await runBriefAnalysis({ ...input, phase: 'route-details', context: h.saved(), provisionalValues: { requestTypes: ['EVOLVE'] } }, h.dependencies);
+  assert.deepEqual(h.calls.map((call) => call.phase), ['general-information', 'route-selection', 'route-details']);
+  assert.deepEqual(h.calls.map((call) => Boolean(call.documents[0].data)), [true, false, false]);
+  assert.deepEqual(h.calls.map((call) => call.context?.latestInteractionId), [undefined, 'id-1', 'id-2']);
+  assert.ok(h.calls.every((call) => Object.keys(call.values).length === 0));
+  assert.equal(h.saved().readingInteractionId, 'id-1');
+  assert.deepEqual(details.proposals.map((item) => item.fieldId), ['evolveNeeds']);
+});
 
 test('two calls prepare Scope, persist reading first and do not resend source content', async () => {
   const h = harness();

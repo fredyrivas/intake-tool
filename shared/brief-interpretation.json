@@ -1,6 +1,6 @@
 {
   "version": {
-    "instruction": "2026-09-29.2"
+    "instruction": "2026-10-02.1"
   },
   "general": [
     {
@@ -13,7 +13,7 @@
       "id": "initial-proposals",
       "title": "Initial proposals and evidence",
       "before": "paragraph",
-      "text": "On the initial interpretation, values explicitly stated in the request are still proposals until the requester confirms the interpretation. Use source kind note and quote only the short phrase that supports each value. Likely requestTypes routes are recommendations with source kind interpretation and must be confirmed. requestTypes may contain one or more routes; include every route explicitly supported by the request without adding speculative alternatives. If a document supports a value, cite that document and its page or slide. Propose only fields included in this task’s catalog. Downstream fields are handled separately in Review."
+      "text": "During the initial interpretation, values explicitly stated in the request are still proposals until the requester confirms the interpretation. Use source kind note and quote only the short phrase that supports each value. If a document supports a value, cite that document and its page or slide. Propose only fields included in this task’s catalog. Other fields are handled in subsequent tasks."
     },
     {
       "id": "confirmed-values",
@@ -64,7 +64,7 @@
       "id": "work-routes",
       "title": "Work route decisions",
       "before": "paragraph",
-      "text": "Apply the route definitions narrowly. CREATE is net-new production or a new creative idea that is not NPD. EVOLVE covers adaptations and refreshes of existing ATL or annual-campaign assets, including work distributed through Linear TV, CTV or YouTube. ACCELERATE requires explicit e-commerce, digital-retailer-page or Shopper BTL work; channel specifications or an asset spreadsheet alone do not activate it. INNOVATE requires explicit new-product-launch (NPD) content. .com Copy Optimization is for copy optimization, FAQ creation or article review. QR Generation Request is for QR creation. Delivery only is for distributing existing assets without creation or adaptation. Never add a second route merely because an attachment contains specifications for several channels. When more than one route is explicitly part of the same request, keep each supported route; when definitions remain ambiguous, ask the requester to choose.",
+      "text": "Apply the route definitions narrowly. CREATE is net-new production or a new creative idea that is not NPD. EVOLVE covers adaptations and refreshes of existing ATL or annual-campaign assets, including work distributed through Linear TV, CTV or YouTube. ACCELERATE requires explicit e-commerce, digital-retailer-page or Shopper BTL work; channel specifications or an asset spreadsheet alone do not activate it. INNOVATE requires explicit new-product-launch (NPD) content. .com Copy Optimization is for copy optimization, FAQ creation or article review. QR Generation Request is for QR creation. Delivery only is for distributing existing assets without creation or adaptation. Never add a second route merely because an attachment contains specifications for several channels. When more than one route is explicitly part of the same request, keep each supported route; when definitions remain ambiguous, ask the requester to choose. Likely routes are recommendations with source kind interpretation and require human confirmation. Keep each explicitly supported route without adding speculative alternatives.",
       "fieldIds": [
         "requestTypes"
       ]

@@ -142,6 +142,7 @@ export async function finishInteraction(
     phase: AnalysisPhase;
     documents: Attachment[];
     values: Values;
+    provisionalValues?: Values;
     intent: string;
     context: AnalysisContext | null;
     dispositions: Record<string, string>;
@@ -150,10 +151,11 @@ export async function finishInteraction(
   const { data, metadata } = interactionResponse(result);
   const contents = input.documents.filter((doc) => doc.data);
   let reading = input.context?.reading;
-  if (input.phase === 'document-reading' || input.phase === 'document-enrichment') {
+  const initial = ['document-reading', 'general-information'].includes(input.phase);
+  if (initial || input.phase === 'document-enrichment') {
     const extracted = parseSourceReading(data, contents);
     reading =
-      input.phase === 'document-reading' || !reading
+      initial || !reading
         ? extracted
         : {
             summary: extracted.summary,
@@ -174,7 +176,7 @@ export async function finishInteraction(
     configurationVersion: BRIEF_CONFIG_VERSION,
     intentDigest: await digest(input.intent.trim()),
     documents:
-      input.phase === 'document-reading'
+      initial
         ? incomingStamps
         : [
             ...(input.context?.documents ?? []).filter(
@@ -184,20 +186,24 @@ export async function finishInteraction(
           ],
     reading,
     readingInteractionId:
-      input.phase === 'document-reading' ? result.id : input.context!.readingInteractionId,
+      initial ? result.id : input.context!.readingInteractionId,
     latestInteractionId: result.id,
   };
   if (input.phase === 'document-reading') return { context, analysis: null };
   const withClassifications = { ...data, documentClassifications: reading.documentClassifications };
+  const activationValues = { ...input.provisionalValues, ...input.values };
+  const classified = applyDocumentClassifications(
+    validateRetailerWebEvidence(withClassifications, metadata),
+    input.documents,
+  );
   const parsed = analysisForActivePath(
-    applyDocumentClassifications(
-      validateRetailerWebEvidence(withClassifications, metadata),
-      input.documents,
-    ),
-    input.values,
+    classified,
+    input.phase === 'route-details'
+      ? { ...Object.fromEntries(classified.proposals.map((proposal) => [proposal.fieldId, proposal.values])), ...activationValues }
+      : activationValues,
   );
   const allowed = new Set(
-    catalogForPhase(input.phase, input.values, input.documents).map((field) => field.id),
+    catalogForPhase(input.phase, activationValues, input.documents).map((field) => field.id),
   );
   const analysis: Analysis = {
     ...parsed,
@@ -230,7 +236,7 @@ export async function finishInteraction(
             (question) =>
               allowed.has(question.fieldId) &&
               (fields.find((field) => field.id === question.fieldId)?.required ||
-                (input.phase === 'scope' && question.fieldId === 'requestTypes')) &&
+                (['scope', 'route-selection'].includes(input.phase) && question.fieldId === 'requestTypes')) &&
               !input.values[question.fieldId]?.length,
           ),
   };

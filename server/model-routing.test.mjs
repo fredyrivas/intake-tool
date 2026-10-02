@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { readAnalysisRequest, selectModel } from './brief-analysis.ts';
 import { analysisSchemaForPhase } from './brief-instruction.ts';
-import { fields, parseAnalysis } from '../shared/brief-contract.ts';
+import { parseAnalysis } from '../shared/brief-contract.ts';
 
 const config = {
   routingModel: 'gemini-3.8-flash',
@@ -17,10 +17,12 @@ const request = (phase, values = {}, message = '', dispositions = {}) => ({
   dispositions,
 });
 
-test('uses the strongest model for initial scope routing', () => {
-  const selection = selectModel(request('scope'), config);
-  assert.equal(selection.model, config.routingModel);
-  assert.equal(selection.thinkingLevel, 'MEDIUM');
+test('uses the fixed extraction model with LOW thinking for every phase', () => {
+  for (const phase of ['document-reading', 'scope', 'document-enrichment', 'follow-up', 'final-review']) {
+    const selection = selectModel(request(phase), config);
+    assert.equal(selection.model, 'gemini-3.5-flash-lite', phase);
+    assert.equal(selection.thinkingLevel, 'LOW', phase);
+  }
 });
 
 test('analysis omits conditional requirement decisions in every phase', () => {
@@ -43,56 +45,19 @@ test('analysis omits conditional requirement decisions in every phase', () => {
   }
 });
 
-test('uses more thinking for document classification than routine follow-up', () => {
-  const enrichment = selectModel(
-    request('document-enrichment', {
-      requestTypes: ['EVOLVE'],
-      mediaPlacementRetailer: ['Walmart'],
-    }),
-    config,
-  );
-  assert.equal(enrichment.model, config.extractionModel);
-  assert.equal(enrichment.thinkingLevel, 'LOW');
-  const followUp = selectModel(request('follow-up', { requestTypes: ['EVOLVE'] }), config);
-  assert.equal(followUp.model, config.extractionModel);
-  assert.equal(followUp.thinkingLevel, 'MINIMAL');
-});
-
-test('uses the search-capable routing model when documents may resolve a missing retailer', () => {
-  const selection = selectModel(
+test('keeps the same model and thinking for retailer ambiguity, route changes and incomplete reviews', () => {
+  const cases = [
     request('document-enrichment', { requestTypes: ['EVOLVE'] }),
-    config,
-  );
-  assert.equal(selection.model, config.routingModel);
-  assert.equal(selection.thinkingLevel, 'LOW');
-});
-
-test('escalates route reinterpretation and inconsistent final reviews', () => {
-  const reinterpretation = selectModel(
+    request('document-enrichment', { requestTypes: ['EVOLVE'], mediaPlacementRetailer: ['Walmart'] }),
     request('follow-up', { requestTypes: ['EVOLVE'] }, 'Please change route'),
-    config,
-  );
-  assert.equal(reinterpretation.model, config.routingModel);
-  assert.equal(reinterpretation.thinkingLevel, 'MEDIUM');
-
-  const incompleteReview = selectModel(
     request('final-review', { requestTypes: ['EVOLVE'] }),
-    config,
-  );
-  assert.equal(incompleteReview.model, config.routingModel);
-  assert.equal(incompleteReview.thinkingLevel, 'LOW');
-  const completeExceptRegion = Object.fromEntries(
-    fields
-      .filter((field) => field.required && field.id !== 'region')
-      .map((field) => [field.id, ['provided']]),
-  );
-  const pendingReview = selectModel(
-    request('final-review', completeExceptRegion, '', {
-      region: 'pending',
-    }),
-    config,
-  );
-  assert.equal(pendingReview.model, config.routingModel);
+    request('final-review', { requestTypes: ['EVOLVE'] }, '', { region: 'pending' }),
+  ];
+  for (const input of cases) {
+    const selection = selectModel(input, config);
+    assert.equal(selection.model, 'gemini-3.5-flash-lite');
+    assert.equal(selection.thinkingLevel, 'LOW');
+  }
 });
 
 test('follow-up accepts document references without resending file contents', async () => {

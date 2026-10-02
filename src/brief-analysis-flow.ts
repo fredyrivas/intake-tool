@@ -23,6 +23,7 @@ type FlowInput = {
   message: string;
   documents: Attachment[];
   values: Values;
+  provisionalValues?: Values;
   dispositions: Record<string, string>;
   pendingProposals: Pick<Proposal, 'fieldId' | 'values'>[];
   context: AnalysisContext | null;
@@ -110,7 +111,7 @@ export async function runBriefAnalysis(
           documents: input.documents.map((doc) => ({
             ...doc,
             data:
-              phase === 'document-reading' ||
+              ['document-reading', 'general-information'].includes(phase) ||
               (phase === 'document-enrichment' &&
                 !context?.documents.some((stamp) => stamp.id === doc.id))
                 ? doc.data
@@ -176,6 +177,7 @@ export async function runBriefAnalysis(
   };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      if (input.phase === 'general-information') return (await call(input.phase, input.message))!;
       if (!context) await call('document-reading', input.intent.trim());
       if (
         input.phase !== 'document-enrichment' &&

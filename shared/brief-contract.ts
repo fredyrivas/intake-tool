@@ -164,7 +164,7 @@ export type Analysis = {
   conditionalRequiredFieldIds: string[];
   warnings: string[];
 };
-export type AnalysisPhase = 'document-reading' | 'scope' | 'document-enrichment' | 'follow-up' | 'final-review';
+export type AnalysisPhase = 'general-information' | 'route-selection' | 'route-details' | 'document-reading' | 'scope' | 'document-enrichment' | 'follow-up' | 'final-review';
 export type AnalysisProgress = {
   phase: AnalysisPhase;
   stage: 'preparation' | 'submission' | 'provider' | 'retrying' | 'validation' | 'checkpoint';
@@ -206,6 +206,7 @@ export type AiRequestTrace = {
     totalTokens: number | null;
     errorCode?: string;
     validationIssue?: string;
+    validationDetail?: EvidenceValidationError['detail'];
   }[];
   requestSummary?: {
     catalogFields: number;
@@ -308,6 +309,22 @@ export function capitalizeAnalysisCopy(analysis: Analysis): Analysis {
   };
 }
 
+export class EvidenceValidationError extends Error {
+  detail: { fieldId: string; proposalIndex: number; path: string; rule: string };
+  proposal: Proposal;
+
+  constructor(message: string, proposal: Proposal, proposalIndex: number, property: string, rule: string) {
+    super(message);
+    this.proposal = proposal;
+    this.detail = {
+      fieldId: proposal.fieldId,
+      proposalIndex,
+      path: `proposals[${proposalIndex}].source${property ? `.${property}` : ''}`,
+      rule,
+    };
+  }
+}
+
 export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis {
   if (!input || typeof input !== 'object') throw new Error('Invalid analysis response.');
   const a = input as Analysis;
@@ -323,7 +340,7 @@ export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis
     a.warnings.length > 20
   )
     throw new Error('Invalid analysis response.');
-  for (const p of a.proposals) {
+  for (const [proposalIndex, p] of a.proposals.entries()) {
     const f = modelFields.find((f) => f.id === p.fieldId);
     if (
       !f ||
@@ -344,16 +361,21 @@ export function parseAnalysis(input: unknown, documents: Attachment[]): Analysis
       throw new Error('Invalid proposed field or source.');
     if (['email', 'emails'].includes(f.type) && (p.source.kind === 'interpretation' || !p.values.every((value) => p.source.excerpt.toLowerCase().includes(value.toLowerCase()))))
       throw new Error('Email proposals require explicit role-labeled evidence.');
-    if (
-      p.source.kind === 'document' &&
-      (!documents.some((d) => d.id === p.source.documentId) ||
-        !p.source.excerpt.trim() ||
-        (['application/pdf', presentationMimeType].includes(documents.find((d) => d.id === p.source.documentId)?.mimeType || '') &&
-          p.source.page < 1))
-    )
-      throw new Error('Missing document evidence.');
+    if (p.source.kind === 'document') {
+      const document = documents.find((d) => d.id === p.source.documentId);
+      if (!document)
+        throw new EvidenceValidationError('Missing document evidence.', p, proposalIndex, 'documentId',
+          'Use the exact ID of a provided attachment; filenames and invented IDs are not attachment IDs.');
+      if (!p.source.excerpt.trim())
+        throw new EvidenceValidationError('Missing document evidence.', p, proposalIndex, 'excerpt',
+          'Document evidence requires a non-empty supporting excerpt.');
+      if (['application/pdf', presentationMimeType].includes(document.mimeType) && p.source.page < 1)
+        throw new EvidenceValidationError('Missing document evidence.', p, proposalIndex, 'page',
+          'PDF evidence requires a 1-based page; PPTX evidence requires a 1-based slide. Do not invent a locator.');
+    }
     if (p.source.kind !== 'document' && (p.source.documentId !== '' || p.source.page !== 0))
-      throw new Error('Invalid non-document evidence.');
+      throw new EvidenceValidationError('Invalid non-document evidence.', p, proposalIndex, '',
+        'Note and interpretation sources require documentId "" and page 0. Keep document evidence as kind document.');
   }
   if (
     !a.questions.every((q) => {

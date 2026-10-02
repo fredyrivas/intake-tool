@@ -3,6 +3,7 @@ import {
   documentRoles,
   modelFields,
   moduleIdByFieldId,
+  presentationMimeType,
   validValue,
   type AnalysisPhase,
   type Attachment,
@@ -33,6 +34,26 @@ export function catalogForPhase(
   const eligible = modelFields.filter((field) => field.id !== 'projectName');
   const active = new Set(activeFields(values).map((field) => field.id));
   switch (briefWorkflow.tasks[phase].catalog) {
+    case 'module-01':
+      return eligible.filter((field) => moduleIdByFieldId.get(field.id) === '01');
+    case 'routes':
+      return eligible.filter((field) => field.id === 'requestTypes');
+    case 'route-modules-02-04': {
+      // Include reachable child choices, while keeping the selected routes fixed.
+      const reachableValues = { ...values };
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const field of activeFields(reachableValues)) {
+          if (field.id !== 'requestTypes' && field.options && !reachableValues[field.id]) {
+            reachableValues[field.id] = field.options;
+            expanded = true;
+          }
+        }
+      }
+      const reachable = new Set(activeFields(reachableValues).map((field) => field.id));
+      return eligible.filter((field) => reachable.has(field.id) && moduleIdByFieldId.get(field.id) !== '01' && field.id !== 'requestTypes');
+    }
     case 'none':
       return [];
     case 'module-01-and-routes':
@@ -85,19 +106,58 @@ export const ROUTE_DECISION_GUIDE = {
 };
 
 // Expand shared definitions to avoid relying on provider-specific $ref support.
-function expandSchema(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(expandSchema);
+function sourceSchema(documents: Attachment[], fact: boolean) {
+  const source = briefWorkflow.responseContracts.definitions.source;
+  const branches = [false, true].flatMap((paginated) => {
+    const ids = documents.filter((document) =>
+      ['application/pdf', presentationMimeType].includes(document.mimeType) === paginated,
+    ).map((document) => document.id);
+    if (!ids.length) return [];
+    return [{
+      ...source,
+      properties: {
+        ...source.properties,
+        kind: { type: 'string', enum: ['document'] },
+        documentId: { type: 'string', enum: ids },
+        page: paginated ? { type: 'integer', minimum: 1 } : { type: 'integer', enum: [0] },
+        excerpt: { type: 'string', description: 'A non-empty supporting excerpt from this document. Copy validated sourceFacts evidence when applicable.' },
+      },
+    }];
+  });
+  for (const kind of fact ? ['note'] : ['note', 'interpretation']) {
+    branches.push({
+      ...source,
+      properties: {
+        ...source.properties,
+        kind: { type: 'string', enum: [kind] },
+        documentId: { type: 'string', enum: [''] },
+        page: { type: 'integer', enum: [0] },
+        excerpt: { type: 'string', description: 'Requester text for a note, or reasoning for an interpretation. Never change document evidence into a note or interpretation.' },
+      },
+    });
+  }
+  // Extracted facts cannot use web evidence; interpretation URLs are also invalid.
+  for (const branch of branches) {
+    if (fact || branch.properties.kind.enum.includes('interpretation'))
+      delete (branch.properties as Record<string, unknown>).webUrl;
+  }
+  return { anyOf: branches };
+}
+
+function expandSchema(value: unknown, documents?: Attachment[], fact = false): unknown {
+  if (Array.isArray(value)) return value.map((child) => expandSchema(child, documents, fact));
   if (!value || typeof value !== 'object') return value;
   const record = value as Record<string, unknown>;
   if (typeof record.$ref === 'string') {
     const key = record.$ref.replace('#/$defs/', '');
     if (key === 'documentRole') return { type: 'string', enum: documentRoles };
+    if (key === 'source' && documents) return sourceSchema(documents, fact);
     const definitions = briefWorkflow.responseContracts.definitions;
     if (!(key in definitions)) throw new Error(`Unknown schema definition: ${key}`);
-    return expandSchema(definitions[key as keyof typeof definitions]);
+    return expandSchema(definitions[key as keyof typeof definitions], documents, fact || key === 'facts');
   }
   return Object.fromEntries(
-    Object.entries(record).map(([key, child]) => [key, expandSchema(child)]),
+    Object.entries(record).map(([key, child]) => [key, expandSchema(child, documents, fact)]),
   );
 }
 
@@ -116,26 +176,27 @@ function interactionSchema(value: unknown): unknown {
 export const analysisSchema = expandSchema(
   briefWorkflow.responseContracts.analysis,
 ) as typeof briefWorkflow.responseContracts.analysis;
-export function analysisSchemaForPhase(phase: AnalysisPhase, catalog = catalogForPhase(phase, {})) {
+export function analysisSchemaForPhase(phase: AnalysisPhase, catalog = catalogForPhase(phase, {}), documents: Attachment[] = []) {
   const contract = briefWorkflow.tasks[phase].contract;
   if (contract === 'reading')
     return interactionSchema(
-      expandSchema(briefWorkflow.responseContracts.reading),
+      expandSchema(briefWorkflow.responseContracts.reading, documents),
     ) as Record<string, unknown>;
   const fieldIds = catalog.map((field) => field.id);
   const questionIds = catalog
-    .filter((field) => field.required || (phase === 'scope' && field.id === 'requestTypes'))
+    .filter((field) => field.required || (['scope', 'route-selection'].includes(phase) && field.id === 'requestTypes'))
     .map((field) => field.id);
-  const proposals = analysisSchema.properties.proposals;
-  const questions = analysisSchema.properties.questions;
+  const schema = expandSchema(briefWorkflow.responseContracts.analysis, documents) as typeof analysisSchema;
+  const proposals = schema.properties.proposals;
+  const questions = schema.properties.questions;
   return interactionSchema({
-    ...analysisSchema,
+    ...schema,
     required: [
-      ...analysisSchema.required,
+      ...schema.required,
       ...(contract === 'enrichment' ? ['facts', 'documentClassifications'] : []),
     ],
     properties: {
-      ...analysisSchema.properties,
+      ...schema.properties,
       proposals: {
         ...proposals,
         ...(!fieldIds.length ? { maxItems: 0 } : {}),
@@ -160,7 +221,7 @@ export function analysisSchemaForPhase(phase: AnalysisPhase, catalog = catalogFo
       },
       ...(contract === 'enrichment'
         ? {
-            facts: expandSchema(briefWorkflow.responseContracts.definitions.facts),
+            facts: expandSchema(briefWorkflow.responseContracts.definitions.facts, documents, true),
             documentClassifications: expandSchema(
               briefWorkflow.responseContracts.definitions.documentClassifications,
             ),

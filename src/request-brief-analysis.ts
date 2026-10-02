@@ -19,7 +19,7 @@ export async function requestBriefAnalysis(
       const data = await response.json();
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
       if (response.status === 202 && data.progress &&
-        ['document-reading', 'scope', 'document-enrichment', 'follow-up', 'final-review'].includes(data.progress.phase) &&
+        ['general-information', 'route-selection', 'route-details', 'document-reading', 'scope', 'document-enrichment', 'follow-up', 'final-review'].includes(data.progress.phase) &&
         ['preparation', 'provider', 'retrying', 'validation'].includes(data.progress.stage))
         onProgress?.({ phase: data.progress.phase, stage: data.progress.stage });
       return data;

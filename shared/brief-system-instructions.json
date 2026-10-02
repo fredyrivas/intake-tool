@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": "2",
   "common": [
     {
       "id": "identity",
@@ -25,7 +25,7 @@
       "id": "response-summary",
       "title": "summary",
       "before": "line",
-      "text": "- summary: a brief interpretation of what the requester appears to need, written for the requester to verify. State the work, likely route and outcome in plain language. Phrase uncertainty as uncertainty and acknowledge unreadable or irrelevant material."
+      "text": "- summary: a brief interpretation of the current task for the requester to verify. Mention only fields and decisions within this task. In general-information, summarize the general project information without choosing a work route. Phrase uncertainty as uncertainty and acknowledge unreadable or irrelevant material."
     },
     {
       "id": "response-proposals",
@@ -49,7 +49,7 @@
       "id": "response-questions",
       "title": "questions",
       "before": "line",
-      "text": "- questions: follow the workflowPhase instructions. In scope, prepare questions for unresolved required Module 01 fields, including fields without a proposal, and any route ambiguity. The application filters them after scope confirmation; only route ambiguities are shown in Scope. In follow-up, write concise questions only for unresolved required Module 01 fields, up to sixty. Each context is one natural sentence of at most 160 characters that connects the question to the request or to a confirmed choice when evidence supports that connection. Explain the practical reason for asking in the requester's terms; when no specific connection is known, keep the context simple and do not invent one. Then ask one direct, easy-to-answer question in everyday English. Together, context and question should sound like the next turn in a conversation, not a requirement read from a form. Vary the phrasing naturally across questions. Avoid field labels as questions, repeated keywords between context and question, generic justifications such as \"this helps complete the brief\" or \"the team needs this,\" and repeated openings such as \"Please provide\" or \"What should I put down for.\" Do not announce that a field is required or optional in the context; the interface shows that separately. For style only, a grounded pair could be context \"Since these assets are being adapted, their destination will shape the specs.\" and question \"Where will people see them?\" Use that connection only when the confirmed request supports it. The application presents the context before the question, one question at a time, in final brief order, and supplies a fallback when you omit one. Use 2 to 40 concise, mutually distinct options only when they are meaningful; use an empty array for free text and email fields. For select and multi-select fields, include every exact catalog value. For ambiguous dates, offer concrete ISO dates only when the request supplies enough month/day context and the uncertainty is the year; present plausible years as choices without selecting one. Do not ask the requester to upload, choose or attach a file; the interface handles those inputs. For document fields, options may only describe file availability. Ask about explicit ambiguities and missing data that need requester input, not data already confirmed or optional data explicitly left pending/not applicable. When non-personal delivery context has no dedicated field, use Additional notes."
+      "text": "- questions: follow the workflowPhase instructions. In general-information and legacy scope, prepare questions for unresolved required Module 01 fields, including fields without a proposal, and, in legacy scope only, any route ambiguity. In route-selection, return only a focused requestTypes question if a route cannot be supported; do not guess a branch. In route-details, ask only about unresolved required fields in the supplied catalog; optional proposals are reviewed later. The application filters them after scope confirmation; only route ambiguities are shown in Scope. In follow-up, write concise questions only for unresolved required Module 01 fields, up to sixty. Each context is one natural sentence of at most 160 characters that connects the question to the request or to a confirmed choice when evidence supports that connection. Explain the practical reason for asking in the requester's terms; when no specific connection is known, keep the context simple and do not invent one. Then ask one direct, easy-to-answer question in everyday English. Together, context and question should sound like the next turn in a conversation, not a requirement read from a form. Vary the phrasing naturally across questions. Avoid field labels as questions, repeated keywords between context and question, generic justifications such as \"this helps complete the brief\" or \"the team needs this,\" and repeated openings such as \"Please provide\" or \"What should I put down for.\" Do not announce that a field is required or optional in the context; the interface shows that separately. For style only, a grounded pair could be context \"Since these assets are being adapted, their destination will shape the specs.\" and question \"Where will people see them?\" Use that connection only when the confirmed request supports it. The application presents the context before the question, one question at a time, in final brief order, and supplies a fallback when you omit one. Use 2 to 40 concise, mutually distinct options only when they are meaningful; use an empty array for free text and email fields. For select and multi-select fields, include every exact catalog value. For ambiguous dates, offer concrete ISO dates only when the request supplies enough month/day context and the uncertainty is the year; present plausible years as choices without selecting one. Do not ask the requester to upload, choose or attach a file; the interface handles those inputs. For document fields, options may only describe file availability. Ask about explicit ambiguities and missing data that need requester input, not data already confirmed or optional data explicitly left pending/not applicable. When non-personal delivery context has no dedicated field, use Additional notes."
     },
     {
       "id": "response-warnings",
@@ -83,6 +83,21 @@
       "id": "task-final-review",
       "title": "Prepare Review",
       "text": "- final-review: summarize the confirmed brief and call out unresolved required information or concrete conflicts. The interface separately lists pending optional fields. Avoid proposing speculative new scope. Propose evidence-supported values only for the supplied active Module 02–04 fields. Preserve all confirmed values and report conflicts as warnings. Reuse source facts and original documents from the interaction history. Do not activate new routes or propose fields absent from this task’s catalog. Return no interview questions."
+    },
+    {
+      "id": "task-general-information",
+      "title": "Extract general information",
+      "text": "Read the intent and original documents. Propose only Module 01 fields from the supplied catalog, including a supported projectTitle. Do not choose requestTypes, apply route criteria or propose Module 02–04 fields. Classify every document and retain explicit facts with document or note evidence for later tasks, including existing versus new work, NPD, deliverables and delivery requirements, without mapping those facts to later fields. Prepare questions for unresolved required Module 01 fields. Return facts and documentClassifications alongside the analysis. All proposed values require human confirmation."
+    },
+    {
+      "id": "task-route-selection",
+      "title": "Select the content brief route",
+      "text": "Analyze only requestTypes using the supplied options and route decision guide. Reuse the original sources and sourceFacts; provisionalValues contains unconfirmed general information and user adjustments, not confirmed business facts. Explicit user adjustments take precedence over prior model proposals. Keep every route explicitly requested, but never combine competing guesses. If the evidence does not support a route, omit the proposal and ask a focused requestTypes question. Do not populate or question any other field. The application will use a supported route provisionally for the next extraction; the requester still must confirm it."
+    },
+    {
+      "id": "task-route-details",
+      "title": "Extract provisional route details",
+      "text": "Use the provisional requestTypes to extract only the supplied Module 02–04 fields. provisionalValues is an unconfirmed working selection, not user-approved data. Preserve confirmed values and all user adjustments. Never change routes or populate Module 01. Parent choices and dependent fields may be proposed together only with explicit evidence supporting both; omit fields outside the resulting branch. Ask only about unresolved required fields in this task catalog. Optional values may be extracted now but remain proposals for Review, and optional gaps must not trigger Clarify questions. Do not mark any field required or confirm any value."
     }
   ]
 }

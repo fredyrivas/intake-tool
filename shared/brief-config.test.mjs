@@ -132,6 +132,22 @@ test('task configuration resolves unique instruction, field and schema reference
 });
 
 test('task catalogs and criteria stay within their intended scope', () => {
+  const general = catalogForPhase('general-information', {});
+  assert.ok(general.length > 0);
+  assert.ok(general.every((field) => moduleIdByFieldId.get(field.id) === '01' && field.id !== 'projectName'));
+  assert.deepEqual(catalogForPhase('route-selection', {}).map((field) => field.id), ['requestTypes']);
+  const routeCriteria = interpretation.byField.find((rule) => rule.id === 'work-routes').text;
+  assert.ok(!systemInstructionForPhase('general-information', general.map((field) => field.id)).includes(routeCriteria));
+  assert.ok(systemInstructionForPhase('route-selection', ['requestTypes']).includes(routeCriteria));
+  const details = catalogForPhase('route-details', { requestTypes: ['EVOLVE'] });
+  assert.ok(details.every((field) => moduleIdByFieldId.get(field.id) !== '01' && field.id !== 'requestTypes'));
+  assert.ok(details.some((field) => field.id === 'voLanguage'), 'Reachable children should be available in the same pass');
+  assert.ok(!details.some((field) => field.id === 'createDeliverables'));
+  assert.ok(!details.some((field) => field.id === 'accelerateDeliverables'));
+  assert.ok(!systemInstructionForPhase('route-details', details.map((field) => field.id)).includes(routeCriteria));
+  assert.deepEqual(analysisSchemaForPhase('route-selection').properties.proposals.items.properties.fieldId.enum, ['requestTypes']);
+  assert.deepEqual(analysisSchemaForPhase('route-selection').properties.questions.items.properties.fieldId.enum, ['requestTypes']);
+  assert.ok(analysisSchemaForPhase('general-information').required.includes('facts'));
   assert.deepEqual(catalogForPhase('document-reading', {}), []);
   const scope = catalogForPhase('scope', {});
   assert.equal(scope.length, 11);

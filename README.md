@@ -39,9 +39,10 @@ The checked-in defaults are documented in `.env.example`:
 GOOGLE_CLOUD_PROJECT=scj-nacb-transfor-ai
 GOOGLE_CLOUD_LOCATION=global
 GOOGLE_GENAI_USE_VERTEXAI=true
-GEMINI_ROUTING_MODEL=gemini-3.8-flash
 GEMINI_EXTRACTION_MODEL=gemini-3.5-flash-lite
 ```
+
+For latency testing, every analysis phase and retry uses the extraction model with `LOW` thinking.
 
 After starting the local app, verify ADC, project access and model availability without generating
 assistant content:
